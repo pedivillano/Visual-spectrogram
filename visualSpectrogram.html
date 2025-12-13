@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>视频播放器 - 实时音频频谱分析</title>
+    <style>
+        .player {
+            width: 1000px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 8px;
+        }
+        .main-container {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .video-section {
+            flex: 1;
+        }
+        .spectrum-section {
+            flex: 1;
+        }
+        .controls {
+            margin: 15px 0;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .config-panel {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .config-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            gap: 10px;
+        }
+        .config-label {
+            width: 150px;
+            font-weight: bold;
+        }
+        .config-value {
+            font-family: monospace;
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        button {
+            padding: 8px 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            background: #2196F3;
+            color: white;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #1976d2;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .time-display {
+            font-family: monospace;
+            font-size: 16px;
+            min-width: 120px;
+        }
+        .slider {
+            flex: 1;
+        }
+        .status-info {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #666;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .volume-control {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .video-container {
+            position: relative;
+            width: 100%;
+            height: 300px;
+            background-color: #000;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .video-placeholder {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            background: linear-gradient(45deg, #1a1a1a, #333);
+        }
+        #videoPlayer {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .file-input {
+            margin-top: 10px;
+            padding: 10px;
+            background: #4CAF50;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .spectrum-container {
+            width: 100%;
+            height: 300px;
+            background-color: #000;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            position: relative;
+        }
+        .spectrum-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .spectrum-info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0,0,0,0.5);
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .param-controls {
+            display: flex;
+            gap: 20px;
+            margin-top: 10px;
+        }
+        .param-group {
+            background: #e8f4fd;
+            padding: 10px;
+            border-radius: 5px;
+            min-width: 200px;
+        }
+        .param-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #1976d2;
+        }
+        .spectrum-controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+        .spectrum-param {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .spectrum-param label {
+            font-size: 12px;
+            color: #666;
+        }
+        input[type="range"] {
+            width: 150px;
+        }
+        .fft-sizes {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .fft-size-btn {
+            padding: 4px 8px;
+            font-size: 12px;
+            background: #ddd;
+            color: #333;
+        }
+        .fft-size-btn.active {
+            background: #2196F3;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="player">
+        <!-- 配置面板 -->
+        <div class="config-panel">
+            <h3>播放参数配置</h3>
+            <div class="param-controls">
+                <div class="param-group">
+                    <div class="param-title">播放片段时长</div>
+                    <div class="config-row">
+                        <label for="segmentSlider">时长(ms):</label>
+                        <input type="range" id="segmentSlider" min="1" max="100" step="1" value="10">
+                        <span class="config-value" id="segmentValue">10</span>
+                    </div>
+                    <div class="config-row">
+                        <span>范围: 1-100ms</span>
+                    </div>
+                </div>
+                
+                <div class="param-group">
+                    <div class="param-title">周期间隔时间</div>
+                    <div class="config-row">
+                        <label for="intervalSlider">间隔(ms):</label>
+                        <input type="range" id="intervalSlider" min="100" max="5000" step="100" value="1000">
+                        <span class="config-value" id="intervalValue">1000</span>
+                    </div>
+                    <div class="config-row">
+                        <span>范围: 100-5000ms</span>
+                    </div>
+                </div>
+            </div>
+            <div class="config-row">
+                <span>暂停时间:</span>
+                <span class="config-value" id="pauseValue">990</span>
+                <span>ms (自动计算: 间隔 - 片段)</span>
+            </div>
+        </div>
+
+        <!-- 频谱分析参数 -->
+        <div class="config-panel">
+            <h3>频谱分析参数</h3>
+            <div class="spectrum-controls">
+                <div class="spectrum-param">
+                    <label for="smoothingSlider">平滑系数: <span id="smoothingValue">0.8</span></label>
+                    <input type="range" id="smoothingSlider" min="0" max="1" step="0.05" value="0.8">
+                </div>
+                <div class="spectrum-param">
+                    <label for="minDbSlider">最小dB: <span id="minDbValue">-100</span></label>
+                    <input type="range" id="minDbSlider" min="-100" max="0" step="5" value="-100">
+                </div>
+                <div class="spectrum-param">
+                    <label for="maxDbSlider">最大dB: <span id="maxDbValue">-30</span></label>
+                    <input type="range" id="maxDbSlider" min="-100" max="0" step="5" value="-30">
+                </div>
+                <div class="spectrum-param">
+                    <label>FFT大小:</label>
+                    <div class="fft-sizes">
+                        <button class="fft-size-btn" data-size="256">256</button>
+                        <button class="fft-size-btn" data-size="512">512</button>
+                        <button class="fft-size-btn active" data-size="1024">1024</button>
+                        <button class="fft-size-btn" data-size="2048">2048</button>
+                        <button class="fft-size-btn" data-size="4096">4096</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 主要区域：视频和频谱 -->
+        <div class="main-container">
+            <!-- 视频区域 -->
+            <div class="video-section">
+                <h3>视频播放</h3>
+                <div class="video-container">
+                    <video id="videoPlayer" preload="auto" playsinline style="display: none;">
+                        您的浏览器不支持 HTML5 视频
+                    </video>
+                    <div class="video-placeholder" id="videoPlaceholder">
+                        <h3>视频未加载</h3>
+                        <p>请上传视频文件或选择示例视频</p>
+                        <input type="file" id="fileInput" accept="video/*" class="file-input">
+                        <div style="margin-top: 15px;">
+                            <button id="loadSampleBtn">加载示例视频</button>
+                        </div>
+                        <div id="videoError" style="color: #ff6b6b; margin-top: 10px; display: none;"></div>
+                    </div>
+                </div>
+                
+                <div class="controls">
+                    <button id="startBtn" disabled>启动周期播放</button>
+                    <button id="pauseBtn" disabled>暂停</button>
+                    <button id="resetBtn" disabled>重置</button>
+                    <button id="enableAudioBtn" disabled>启用音频</button>
+                    
+                    <div class="volume-control">
+                        <label for="volumeSlider">音量：</label>
+                        <input type="range" id="volumeSlider" min="0" max="1" step="0.1" value="0.5" disabled>
+                    </div>
+                    
+                    <span class="time-display" id="timeDisplay">00:00:00.000</span>
+                </div>
+                <div class="controls">
+                    <input type="range" class="slider" id="progressSlider" min="0" max="100" step="0.001" value="0" disabled>
+                </div>
+            </div>
+
+            <!-- 频谱分析区域 -->
+            <div class="spectrum-section">
+                <h3>实时音频频谱分析</h3>
+                <div class="spectrum-container">
+                    <canvas id="spectrumCanvas" class="spectrum-canvas"></canvas>
+                    <div class="spectrum-info" id="spectrumInfo">
+                        频谱信息: 等待音频数据...
+                    </div>
+                </div>
+                <div class="status-info">
+                    <span id="frequencyRange">频率范围: 0 - 0 Hz</span>
+                    <span id="binCount">频率槽数量: 0</span>
+                    <span id="dominantFreq">主频率: 0 Hz</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-info">
+            <span id="cycleStatus">周期状态：未启动</span>
+            <span id="segmentInfo">当前播放片段：0ms - 0ms</span>
+            <span id="totalPlayed">累计播放片段数：0</span>
+            <span id="audioStatus">音频状态：未加载视频</span>
+            <span id="videoStats">视频状态：未加载</span>
+        </div>
+        <div id="audioAlert" style="color: red; font-size: 12px; margin-top: 5px; display: none;">
+            注意：浏览器限制，需要先点击"启用音频"按钮才能听到声音
+        </div>
+    </div>
+
+    <script>
+        // 核心配置 - 现在这些变量可以通过界面修改
+        let PLAY_SEGMENT_MS = 10;    // 每次播放的片段时长：10ms
+        let CYCLE_INTERVAL_MS = 1000;// 周期间隔：1秒（1000ms）
+        let PAUSE_DURATION_MS = CYCLE_INTERVAL_MS - PLAY_SEGMENT_MS; // 暂停时间
+
+        // 频谱分析配置
+        let SMOOTHING_TIME_CONSTANT = 0.8;  // 频谱平滑系数
+        let MIN_DB = -100;                   // 最小dB值
+        let MAX_DB = -30;                    // 最大dB值
+        let FFT_SIZE = 1024;                 // FFT大小（决定频率分辨率）
+
+        // 核心元素
+        const PLAYER = document.getElementById('videoPlayer');
+        const VIDEO_PLACEHOLDER = document.getElementById('videoPlaceholder');
+        const FILE_INPUT = document.getElementById('fileInput');
+        const LOAD_SAMPLE_BTN = document.getElementById('loadSampleBtn');
+        const START_BTN = document.getElementById('startBtn');
+        const PAUSE_BTN = document.getElementById('pauseBtn');
+        const RESET_BTN = document.getElementById('resetBtn');
+        const ENABLE_AUDIO_BTN = document.getElementById('enableAudioBtn');
+        const VOLUME_SLIDER = document.getElementById('volumeSlider');
+        const TIME_DISPLAY = document.getElementById('timeDisplay');
+        const PROGRESS_SLIDER = document.getElementById('progressSlider');
+        const CYCLE_STATUS = document.getElementById('cycleStatus');
+        const SEGMENT_INFO = document.getElementById('segmentInfo');
+        const TOTAL_PLAYED = document.getElementById('totalPlayed');
+        const AUDIO_STATUS = document.getElementById('audioStatus');
+        const VIDEO_STATS = document.getElementById('videoStats');
+        const AUDIO_ALERT = document.getElementById('audioAlert');
+        const VIDEO_ERROR = document.getElementById('videoError');
+        
+        // 参数控制元素
+        const SEGMENT_SLIDER = document.getElementById('segmentSlider');
+        const SEGMENT_VALUE = document.getElementById('segmentValue');
+        const INTERVAL_SLIDER = document.getElementById('intervalSlider');
+        const INTERVAL_VALUE = document.getElementById('intervalValue');
+        const PAUSE_VALUE = document.getElementById('pauseValue');
+
+        // 频谱分析元素
+        const SPECTRUM_CANVAS = document.getElementById('spectrumCanvas');
+        const SPECTRUM_INFO = document.getElementById('spectrumInfo');
+        const FREQUENCY_RANGE = document.getElementById('frequencyRange');
+        const BIN_COUNT = document.getElementById('binCount');
+        const DOMINANT_FREQ = document.getElementById('dominantFreq');
+        
+        // 频谱控制元素
+        const SMOOTHING_SLIDER = document.getElementById('smoothingSlider');
+        const SMOOTHING_VALUE = document.getElementById('smoothingValue');
+        const MIN_DB_SLIDER = document.getElementById('minDbSlider');
+        const MIN_DB_VALUE = document.getElementById('minDbValue');
+        const MAX_DB_SLIDER = document.getElementById('maxDbSlider');
+        const MAX_DB_VALUE = document.getElementById('maxDbValue');
+        const FFT_SIZE_BTNS = document.querySelectorAll('.fft-size-btn');
+
+        // 状态变量
+        let isRunning = false;         // 是否正在运行周期
+        let isAudioEnabled = false;    // 音频是否已启用
+        let isVideoLoaded = false;     // 视频是否已加载
+        let currentPlayTime = 0;       // 当前播放起始位置（秒）
+        let cycleTimer = null;         // 周期定时器
+        let playTimer = null;          // 播放定时器
+        let totalSegmentCount = 0;     // 累计播放的片段数
+        let videoDuration = 0;         // 视频总时长（秒）
+
+        // Web Audio API 变量
+        let audioContext = null;       // Web Audio上下文
+        let sourceNode = null;         // 音频源节点
+        let analyserNode = null;       // 分析器节点
+        let gainNode = null;           // 音量控制节点
+        let dataArray = null;          // 频谱数据数组
+        let animationFrameId = null;   // 频谱动画帧ID
+
+        // 频谱显示变量
+        const SPECTRUM_CTX = SPECTRUM_CANVAS.getContext('2d');
+        let spectrumWidth = 0;
+        let spectrumHeight = 0;
+
+        // 更新参数显示
+        function updateParamDisplay() {
+            // 确保片段时长不超过周期间隔
+            if (PLAY_SEGMENT_MS > CYCLE_INTERVAL_MS) {
+                PLAY_SEGMENT_MS = CYCLE_INTERVAL_MS;
+                SEGMENT_SLIDER.value = PLAY_SEGMENT_MS;
+            }
+            
+            // 重新计算暂停时间
+            PAUSE_DURATION_MS = CYCLE_INTERVAL_MS - PLAY_SEGMENT_MS;
+            
+            // 更新显示
+            SEGMENT_VALUE.textContent = PLAY_SEGMENT_MS;
+            INTERVAL_VALUE.textContent = CYCLE_INTERVAL_MS;
+            PAUSE_VALUE.textContent = PAUSE_DURATION_MS;
+            
+            // 更新按钮文本
+            START_BTN.textContent = `启动 (${CYCLE_INTERVAL_MS}ms播放${PLAY_SEGMENT_MS}ms)`;
+        }
+
+        // 片段时长滑块事件
+        SEGMENT_SLIDER.addEventListener('input', () => {
+            PLAY_SEGMENT_MS = parseInt(SEGMENT_SLIDER.value);
+            updateParamDisplay();
+            
+            // 如果正在播放，更新显示信息
+            if (isVideoLoaded) {
+                updateSegmentInfo();
+            }
+        });
+
+        // 周期间隔滑块事件
+        INTERVAL_SLIDER.addEventListener('input', () => {
+            CYCLE_INTERVAL_MS = parseInt(INTERVAL_SLIDER.value);
+            updateParamDisplay();
+        });
+
+        // 频谱参数控制事件
+        SMOOTHING_SLIDER.addEventListener('input', () => {
+            SMOOTHING_TIME_CONSTANT = parseFloat(SMOOTHING_SLIDER.value);
+            SMOOTHING_VALUE.textContent = SMOOTHING_TIME_CONSTANT;
+            if (analyserNode) {
+                analyserNode.smoothingTimeConstant = SMOOTHING_TIME_CONSTANT;
+            }
+        });
+
+        MIN_DB_SLIDER.addEventListener('input', () => {
+            MIN_DB = parseInt(MIN_DB_SLIDER.value);
+            MIN_DB_VALUE.textContent = MIN_DB;
+        });
+
+        MAX_DB_SLIDER.addEventListener('input', () => {
+            MAX_DB = parseInt(MAX_DB_SLIDER.value);
+            MAX_DB_VALUE.textContent = MAX_DB;
+        });
+
+        // FFT大小按钮事件
+        FFT_SIZE_BTNS.forEach(btn => {
+            btn.addEventListener('click', () => {
+                FFT_SIZE_BTNS.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                FFT_SIZE = parseInt(btn.dataset.size);
+                
+                if (analyserNode) {
+                    analyserNode.fftSize = FFT_SIZE;
+                    dataArray = new Uint8Array(analyserNode.frequencyBinCount);
+                    updateSpectrumInfo();
+                }
+            });
+        });
+
+        // 更新片段信息显示
+        function updateSegmentInfo() {
+            const segmentEnd = Math.min(currentPlayTime + PLAY_SEGMENT_MS / 1000, videoDuration);
+            SEGMENT_INFO.textContent = `当前播放片段：${Math.floor(currentPlayTime*1000)}ms - ${Math.floor(segmentEnd*1000)}ms`;
+        }
+
+        // 更新频谱信息显示
+        function updateSpectrumInfo() {
+            if (analyserNode && audioContext) {
+                const frequencyBinCount = analyserNode.frequencyBinCount;
+                const sampleRate = audioContext.sampleRate;
+                const frequencyResolution = sampleRate / analyserNode.fftSize;
+                const maxFrequency = sampleRate / 2;
+                
+                BIN_COUNT.textContent = `频率槽数量: ${frequencyBinCount}`;
+                FREQUENCY_RANGE.textContent = `频率范围: 0 - ${Math.round(maxFrequency)} Hz`;
+                SPECTRUM_INFO.textContent = `分辨率: ${frequencyResolution.toFixed(1)} Hz/槽 | 采样率: ${sampleRate} Hz`;
+            }
+        }
+
+        // 初始化Web Audio API
+        function initAudioAnalysis() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            
+            if (sourceNode) {
+                sourceNode.disconnect();
+            }
+            
+            // 创建分析器节点
+            analyserNode = audioContext.createAnalyser();
+            analyserNode.fftSize = FFT_SIZE;
+            analyserNode.smoothingTimeConstant = SMOOTHING_TIME_CONSTANT;
+            
+            // 创建音量控制节点
+            gainNode = audioContext.createGain();
+            gainNode.gain.value = VOLUME_SLIDER.value;
+            
+            // 创建音频源节点（从视频元素）
+            sourceNode = audioContext.createMediaElementSource(PLAYER);
+            
+            // 连接节点：源 -> 音量控制 -> 分析器 -> 目标
+            sourceNode.connect(gainNode);
+            gainNode.connect(analyserNode);
+            analyserNode.connect(audioContext.destination);
+            
+            // 初始化频谱数据数组
+            dataArray = new Uint8Array(analyserNode.frequencyBinCount);
+            
+            // 更新频谱信息显示
+            updateSpectrumInfo();
+            
+            console.log('Web Audio API 初始化完成');
+        }
+
+        // 绘制频谱图
+        function drawSpectrum() {
+            if (!analyserNode || !dataArray) return;
+            
+            // 获取频谱数据
+            analyserNode.getByteFrequencyData(dataArray);
+            
+            // 获取画布尺寸
+            spectrumWidth = SPECTRUM_CANVAS.width;
+            spectrumHeight = SPECTRUM_CANVAS.height;
+            
+            // 清除画布
+            SPECTRUM_CTX.fillStyle = 'rgb(0, 0, 0)';
+            SPECTRUM_CTX.fillRect(0, 0, spectrumWidth, spectrumHeight);
+            
+            // 计算每个频率条的宽度
+            const barWidth = spectrumWidth / dataArray.length;
+            
+            // 寻找主频率
+            let maxValue = 0;
+            let maxIndex = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+                if (dataArray[i] > maxValue) {
+                    maxValue = dataArray[i];
+                    maxIndex = i;
+                }
+            }
+            
+            // 计算主频率
+            if (audioContext) {
+                const sampleRate = audioContext.sampleRate;
+                const dominantFrequency = maxIndex * sampleRate / analyserNode.fftSize;
+                DOMINANT_FREQ.textContent = `主频率: ${dominantFrequency.toFixed(1)} Hz`;
+            }
+            
+            // 绘制频谱
+            for (let i = 0; i < dataArray.length; i++) {
+                // 将dB值转换为高度
+                const value = dataArray[i];
+                const percent = value / 256;
+                
+                // 使用颜色渐变
+                let hue = Math.floor((i / dataArray.length) * 240); // 0-240度色相
+                const saturation = 80 + percent * 20;
+                const lightness = 30 + percent * 40;
+                
+                // 绘制频率条
+                SPECTRUM_CTX.fillStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+                
+                const barHeight = percent * spectrumHeight;
+                const x = i * barWidth;
+                const y = spectrumHeight - barHeight;
+                
+                SPECTRUM_CTX.fillRect(x, y, barWidth - 1, barHeight);
+            }
+            
+            // 绘制网格和标签
+            drawSpectrumGrid();
+            
+            // 继续动画
+            animationFrameId = requestAnimationFrame(drawSpectrum);
+        }
+
+        // 绘制频谱网格和标签
+        function drawSpectrumGrid() {
+            SPECTRUM_CTX.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            SPECTRUM_CTX.lineWidth = 1;
+            SPECTRUM_CTX.font = '10px Arial';
+            SPECTRUM_CTX.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            
+            // 绘制频率网格线
+            if (audioContext) {
+                const sampleRate = audioContext.sampleRate;
+                const maxFrequency = sampleRate / 2;
+                const frequencies = [100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+                
+                for (const freq of frequencies) {
+                    if (freq <= maxFrequency) {
+                        const x = (freq / maxFrequency) * spectrumWidth;
+                        
+                        SPECTRUM_CTX.beginPath();
+                        SPECTRUM_CTX.moveTo(x, 0);
+                        SPECTRUM_CTX.lineTo(x, spectrumHeight);
+                        SPECTRUM_CTX.stroke();
+                        
+                        // 绘制频率标签
+                        let label = freq >= 1000 ? `${freq/1000}kHz` : `${freq}Hz`;
+                        SPECTRUM_CTX.fillText(label, x + 2, spectrumHeight - 5);
+                    }
+                }
+            }
+            
+            // 绘制dB刻度
+            const dbRange = MAX_DB - MIN_DB;
+            for (let db = MIN_DB; db <= MAX_DB; db += 10) {
+                const y = ((MAX_DB - db) / dbRange) * spectrumHeight;
+                
+                SPECTRUM_CTX.beginPath();
+                SPECTRUM_CTX.moveTo(0, y);
+                SPECTRUM_CTX.lineTo(spectrumWidth, y);
+                SPECTRUM_CTX.stroke();
+                
+                SPECTRUM_CTX.fillText(`${db}dB`, 5, y - 2);
+            }
+        }
+
+        // 开始频谱分析
+        function startSpectrumAnalysis() {
+            if (!audioContext) {
+                console.warn('音频上下文未初始化，无法开始频谱分析');
+                return;
+            }
+            
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            
+            // 启动频谱绘制
+            animationFrameId = requestAnimationFrame(drawSpectrum);
+            console.log('频谱分析已启动');
+        }
+
+        // 停止频谱分析
+        function stopSpectrumAnalysis() {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            
+            // 清除频谱画布
+            SPECTRUM_CTX.fillStyle = 'rgb(0, 0, 0)';
+            SPECTRUM_CTX.fillRect(0, 0, SPECTRUM_CANVAS.width, SPECTRUM_CANVAS.height);
+            
+            // 重置频谱信息
+            DOMINANT_FREQ.textContent = '主频率: 0 Hz';
+            console.log('频谱分析已停止');
+        }
+
+        // 调整画布大小
+        function resizeCanvas() {
+            const container = document.querySelector('.spectrum-container');
+            SPECTRUM_CANVAS.width = container.clientWidth;
+            SPECTRUM_CANVAS.height = container.clientHeight;
+        }
+
+        // 加载视频文件
+        const loadVideoFromFile = (file) => {
+            if (!file || !file.type.startsWith('video/')) {
+                showError('请选择有效的视频文件');
+                return;
+            }
+
+            VIDEO_ERROR.style.display = 'none';
+            const videoUrl = URL.createObjectURL(file);
+            
+            // 清除之前的源
+            while (PLAYER.firstChild) {
+                PLAYER.removeChild(PLAYER.firstChild);
+            }
+            
+            // 添加新的视频源
+            const source = document.createElement('source');
+            source.src = videoUrl;
+            source.type = file.type;
+            PLAYER.appendChild(source);
+            
+            // 重新加载视频
+            PLAYER.load();
+            
+            VIDEO_STATS.textContent = `正在加载视频: ${file.name}`;
+        };
+
+        // 加载示例视频
+        const loadSampleVideo = () => {
+            const sampleVideoUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+            
+            while (PLAYER.firstChild) {
+                PLAYER.removeChild(PLAYER.firstChild);
+            }
+            
+            const source = document.createElement('source');
+            source.src = sampleVideoUrl;
+            source.type = 'video/mp4';
+            PLAYER.appendChild(source);
+            
+            PLAYER.load();
+            
+            VIDEO_STATS.textContent = '正在加载示例视频...';
+            VIDEO_ERROR.style.display = 'none';
+        };
+
+        // 显示错误信息
+        const showError = (message) => {
+            VIDEO_ERROR.textContent = message;
+            VIDEO_ERROR.style.display = 'block';
+        };
+
+        // 视频加载成功
+        const onVideoLoaded = () => {
+            isVideoLoaded = true;
+            videoDuration = PLAYER.duration;
+            PROGRESS_SLIDER.max = videoDuration;
+            PROGRESS_SLIDER.step = 0.001;
+            currentPlayTime = PLAYER.currentTime;
+            updateTimeDisplay();
+            
+            // 显示视频，隐藏占位符
+            PLAYER.style.display = 'block';
+            VIDEO_PLACEHOLDER.style.display = 'none';
+            
+            // 启用控制按钮
+            START_BTN.disabled = false;
+            RESET_BTN.disabled = false;
+            ENABLE_AUDIO_BTN.disabled = false;
+            VOLUME_SLIDER.disabled = false;
+            PROGRESS_SLIDER.disabled = false;
+            
+            // 设置初始音量
+            PLAYER.volume = VOLUME_SLIDER.value;
+            
+            // 更新状态显示
+            const durationStr = formatTime(videoDuration);
+            VIDEO_STATS.textContent = `视频已加载: ${durationStr}, ${PLAYER.videoWidth}×${PLAYER.videoHeight}`;
+            AUDIO_STATUS.textContent = `音频状态: ${PLAYER.muted ? '静音' : '有声'}`;
+            
+            // 更新片段信息显示
+            updateSegmentInfo();
+            
+            // 初始化频谱画布
+            resizeCanvas();
+            
+            console.log('视频加载成功');
+        };
+
+        // 格式化时间（时:分:秒.毫秒）
+        const formatTime = (seconds) => {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+            const ms = Math.floor((seconds - Math.floor(seconds)) * 1000);
+            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
+        };
+
+        // 更新时间显示
+        const updateTimeDisplay = () => {
+            TIME_DISPLAY.textContent = formatTime(currentPlayTime);
+            PROGRESS_SLIDER.value = currentPlayTime;
+        };
+
+        // 启用音频和频谱分析
+        const enableAudio = async () => {
+            try {
+                // 尝试播放视频以解锁音频
+                PLAYER.muted = false;
+                PLAYER.volume = VOLUME_SLIDER.value;
+                
+                // 使用用户交互来解锁音频
+                await PLAYER.play();
+                PLAYER.pause();
+                
+                // 初始化Web Audio API
+                initAudioAnalysis();
+                
+                isAudioEnabled = true;
+                AUDIO_STATUS.textContent = '音频状态：已启用（频谱分析就绪）';
+                AUDIO_STATUS.style.color = 'green';
+                AUDIO_ALERT.style.display = 'none';
+                ENABLE_AUDIO_BTN.disabled = true;
+                ENABLE_AUDIO_BTN.textContent = '音频已启用';
+                
+                // 开始频谱分析
+                startSpectrumAnalysis();
+                
+                console.log('音频已成功启用，频谱分析已启动');
+            } catch (error) {
+                console.error('启用音频失败:', error);
+                AUDIO_ALERT.textContent = `音频启用失败：${error.message}。请检查浏览器设置。`;
+                AUDIO_ALERT.style.color = 'orange';
+                AUDIO_ALERT.style.display = 'block';
+            }
+        };
+
+        // 高精度定时器
+        const preciseTimeout = (callback, delay) => {
+            const start = performance.now();
+            const loop = () => {
+                const elapsed = performance.now() - start;
+                if (elapsed >= delay) {
+                    callback();
+                } else {
+                    requestAnimationFrame(loop);
+                }
+            };
+            requestAnimationFrame(loop);
+        };
+
+        // 播放片段核心逻辑
+        const playSegment = async () => {
+            // 边界判断：超出视频时长则停止
+            if (currentPlayTime >= videoDuration) {
+                stopCycle();
+                CYCLE_STATUS.textContent = '周期状态：视频播放完毕';
+                return;
+            }
+
+            // 1. 计算片段的时间范围
+            const segmentStart = currentPlayTime;
+            const segmentEnd = Math.min(currentPlayTime + PLAY_SEGMENT_MS / 1000, videoDuration);
+            const segmentDurationMs = (segmentEnd - segmentStart) * 1000;
+
+            // 2. 更新状态显示
+            SEGMENT_INFO.textContent = `当前播放片段：${Math.floor(segmentStart*1000)}ms - ${Math.floor(segmentEnd*1000)}ms（${segmentDurationMs.toFixed(2)}ms）`;
+            CYCLE_STATUS.textContent = `周期状态：播放${PLAY_SEGMENT_MS}ms片段中`;
+
+            try {
+                // 3. 锁定视频位置，开始播放该片段
+                PLAYER.currentTime = segmentStart;
+                
+                // 只在音频启用时尝试播放音频
+                if (isAudioEnabled) {
+                    PLAYER.muted = false;
+                    await PLAYER.play();
+                } else {
+                    // 音频未启用时静音播放
+                    PLAYER.muted = true;
+                    await PLAYER.play();
+                }
+
+                // 4. 精准播放指定时长后暂停
+                preciseTimeout(() => {
+                    PLAYER.pause();
+                    totalSegmentCount++;
+                    TOTAL_PLAYED.textContent = `累计播放片段数：${totalSegmentCount}`;
+
+                    // 5. 更新下一次播放的起始位置
+                    currentPlayTime = segmentEnd;
+                    updateTimeDisplay();
+
+                    // 6. 进入暂停阶段
+                    CYCLE_STATUS.textContent = `周期状态：暂停中（剩余${PAUSE_DURATION_MS}ms）`;
+                    
+                    // 7. 暂停结束后，启动下一个周期
+                    if (isRunning) {
+                        cycleTimer = setTimeout(() => {
+                            playSegment();
+                        }, PAUSE_DURATION_MS);
+                    }
+                }, segmentDurationMs);
+            } catch (error) {
+                console.error('播放片段失败：', error);
+                try {
+                    PLAYER.muted = true;
+                    await PLAYER.play();
+                } catch (e) {
+                    console.error('静音播放也失败：', e);
+                    stopCycle();
+                    showError(`播放失败: ${error.message}`);
+                }
+            }
+        };
+
+        // 启动周期循环
+        const startCycle = async () => {
+            if (isRunning) return;
+
+            isRunning = true;
+            START_BTN.disabled = true;
+            PAUSE_BTN.disabled = false;
+            CYCLE_STATUS.textContent = '周期状态：启动中';
+
+            // 如果音频未启用，提示用户
+            if (!isAudioEnabled) {
+                AUDIO_ALERT.style.display = 'block';
+                AUDIO_ALERT.textContent = '音频未启用，播放将静音。点击"启用音频"按钮开启声音和频谱分析。';
+                AUDIO_ALERT.style.color = 'orange';
+            }
+
+            // 立即执行第一个片段播放
+            playSegment();
+        };
+
+        // 暂停周期循环
+        const pauseCycle = () => {
+            if (!isRunning) return;
+
+            isRunning = false;
+            clearTimeout(cycleTimer);
+            clearTimeout(playTimer);
+            PLAYER.pause();
+
+            START_BTN.disabled = false;
+            PAUSE_BTN.disabled = true;
+            CYCLE_STATUS.textContent = '周期状态：已暂停';
+        };
+
+        // 停止并重置周期
+        const stopCycle = () => {
+            pauseCycle();
+            currentPlayTime = 0;
+            totalSegmentCount = 0;
+            PLAYER.currentTime = 0;
+            updateTimeDisplay();
+            SEGMENT_INFO.textContent = '当前播放片段：0ms - 0ms';
+            TOTAL_PLAYED.textContent = '累计播放片段数：0';
+            CYCLE_STATUS.textContent = '周期状态：已重置';
+        };
+
+        // 进度条拖拽同步
+        PROGRESS_SLIDER.addEventListener('input', () => {
+            if (!isVideoLoaded) return;
+            
+            if (isRunning) pauseCycle(); // 拖拽时暂停
+            currentPlayTime = parseFloat(PROGRESS_SLIDER.value);
+            PLAYER.currentTime = currentPlayTime;
+            updateTimeDisplay();
+            updateSegmentInfo();
+        });
+
+        // 音量控制
+        VOLUME_SLIDER.addEventListener('input', () => {
+            PLAYER.volume = VOLUME_SLIDER.value;
+            if (gainNode) {
+                gainNode.gain.value = VOLUME_SLIDER.value;
+            }
+        });
+
+        // 事件绑定
+        START_BTN.addEventListener('click', startCycle);
+        PAUSE_BTN.addEventListener('click', pauseCycle);
+        RESET_BTN.addEventListener('click', stopCycle);
+        ENABLE_AUDIO_BTN.addEventListener('click', enableAudio);
+
+        // 文件选择
+        FILE_INPUT.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) {
+                loadVideoFromFile(e.target.files[0]);
+            }
+        });
+
+        // 加载示例视频
+        LOAD_SAMPLE_BTN.addEventListener('click', loadSampleVideo);
+
+        // 视频事件监听
+        PLAYER.addEventListener('loadeddata', onVideoLoaded);
+        PLAYER.addEventListener('canplay', onVideoLoaded);
+        
+        PLAYER.addEventListener('error', (e) => {
+            console.error('视频加载错误：', PLAYER.error);
+            showError(`视频加载失败: ${PLAYER.error ? PLAYER.error.message : '未知错误'}`);
+            VIDEO_STATS.textContent = '视频加载失败';
+        });
+
+        // 窗口大小变化时调整画布
+        window.addEventListener('resize', resizeCanvas);
+
+        // 初始化
+        updateParamDisplay();
+        resizeCanvas();
+
+        // 页面卸载清理
+        window.addEventListener('beforeunload', () => {
+            clearTimeout(cycleTimer);
+            clearTimeout(playTimer);
+            PLAYER.pause();
+            stopSpectrumAnalysis();
+            
+            if (audioContext) {
+                audioContext.close();
+            }
+            
+            if (PLAYER.src && PLAYER.src.startsWith('blob:')) {
+                URL.revokeObjectURL(PLAYER.src);
+            }
+        });
+    </script>
+</body>
+</html>
