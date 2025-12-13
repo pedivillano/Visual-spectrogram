@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本地视频频谱分析器</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        
+        header {
+            background: linear-gradient(90deg, #3498db, #2c3e50);
+            color: white;
+            padding: 25px;
+            text-align: center;
+        }
+        
+        h1 {
+            font-size: 2.2rem;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            font-size: 1rem;
+            opacity: 0.8;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+            padding: 25px;
+        }
+        
+        @media (max-width: 900px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .panel {
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+        
+        .panel h2 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            font-size: 1.4rem;
+        }
+        
+        .file-upload-area {
+            border: 3px dashed #3498db;
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            transition: all 0.3s;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        
+        .file-upload-area:hover {
+            background-color: rgba(52, 152, 219, 0.05);
+            border-color: #2980b9;
+        }
+        
+        .upload-icon {
+            font-size: 3rem;
+            color: #3498db;
+            margin-bottom: 15px;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .video-container {
+            position: relative;
+            width: 100%;
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+        
+        #videoPlayer {
+            width: 100%;
+            display: block;
+        }
+        
+        .video-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 250px;
+            color: #aaa;
+            font-size: 1.1rem;
+        }
+        
+        .video-placeholder i {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            color: #ddd;
+        }
+        
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            background-color: #3498db;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            flex-grow: 1;
+            min-width: 140px;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+            transform: translateY(-2px);
+        }
+        
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        #startAnalysisBtn {
+            background-color: #27ae60;
+        }
+        
+        #startAnalysisBtn:hover:not(:disabled) {
+            background-color: #219653;
+        }
+        
+        #stopAnalysisBtn {
+            background-color: #e74c3c;
+        }
+        
+        #stopAnalysisBtn:hover:not(:disabled) {
+            background-color: #c0392b;
+        }
+        
+        .spectrum-container {
+            width: 100%;
+            height: 300px;
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        #spectrumCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        .spectrum-info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.6);
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 0.9rem;
+            max-width: calc(100% - 20px);
+        }
+        
+        .status-panel {
+            grid-column: 1 / -1;
+        }
+        
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .status-item {
+            background-color: white;
+            border-radius: 8px;
+            padding: 15px;
+            border-left: 4px solid #3498db;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        
+        .status-title {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+        }
+        
+        .status-value {
+            font-size: 1.1rem;
+            font-family: monospace;
+        }
+        
+        .audio-detected {
+            border-left-color: #27ae60;
+        }
+        
+        .audio-not-detected {
+            border-left-color: #e74c3c;
+        }
+        
+        .debug-info {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        
+        .debug-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        #toggleDebugBtn {
+            padding: 5px 10px;
+            font-size: 0.8rem;
+            min-width: auto;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: #7f8c8d;
+            font-size: 0.9rem;
+            border-top: 1px solid #eee;
+        }
+        
+        .instructions {
+            background-color: #fffde7;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            border-left: 4px solid #f1c40f;
+        }
+        
+        .instructions h3 {
+            color: #f39c12;
+            margin-bottom: 10px;
+        }
+        
+        .instructions ul {
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-wave-square"></i> 本地视频频谱分析器</h1>
+            <p class="subtitle">上传本地视频文件，实时分析其音频频谱。支持MP4、WebM、OGG等常见视频格式。</p>
+        </header>
+        
+        <div class="main-content">
+            <div class="panel">
+                <h2><i class="fas fa-upload"></i> 1. 上传视频文件</h2>
+                <div class="file-upload-area" id="uploadArea">
+                    <div class="upload-icon">
+                        <i class="fas fa-file-video"></i>
+                    </div>
+                    <p><strong>点击此处选择视频文件，或将文件拖拽到此区域</strong></p>
+                    <p style="font-size: 0.9rem; margin-top: 10px;">支持格式: MP4, WebM, OGG, MOV等</p>
+                    <input type="file" id="videoFileInput" class="file-input" accept="video/*">
+                </div>
+                
+                <div class="video-container">
+                    <video id="videoPlayer" controls>
+                        您的浏览器不支持HTML5视频播放
+                    </video>
+                    <div class="video-placeholder" id="videoPlaceholder">
+                        <i class="fas fa-film"></i>
+                        <p>视频预览区域</p>
+                        <p>选择文件后将在此处显示</p>
+                    </div>
+                </div>
+                
+                <div class="controls">
+                    <button id="detectAudioBtn" disabled>
+                        <i class="fas fa-search"></i> 检测音频轨道
+                    </button>
+                    <button id="startAnalysisBtn" disabled>
+                        <i class="fas fa-play"></i> 开始频谱分析
+                    </button>
+                    <button id="stopAnalysisBtn" disabled>
+                        <i class="fas fa-stop"></i> 停止分析
+                    </button>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h2><i class="fas fa-chart-bar"></i> 2. 实时频谱分析</h2>
+                <div class="spectrum-container">
+                    <canvas id="spectrumCanvas"></canvas>
+                    <div class="spectrum-info" id="spectrumInfo">
+                        等待音频数据...
+                    </div>
+                </div>
+                
+                <div class="instructions">
+                    <h3><i class="fas fa-lightbulb"></i> 使用提示</h3>
+                    <ul>
+                        <li>如果频谱图没有显示，请先点击"检测音频轨道"按钮</li>
+                        <li>确保视频文件包含音频轨道（可用系统播放器验证）</li>
+                        <li>某些浏览器需要用户交互（如点击按钮）后才能播放音频</li>
+                        <li>频谱分析仅使用音频数据，不会上传视频到服务器</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="panel status-panel">
+                <h2><i class="fas fa-info-circle"></i> 3. 分析状态</h2>
+                <div class="status-grid" id="statusGrid">
+                    <div class="status-item">
+                        <div class="status-title">文件状态</div>
+                        <div class="status-value" id="fileStatus">未选择文件</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-title">音频检测</div>
+                        <div class="status-value" id="audioStatus">等待检测</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-title">频谱分析</div>
+                        <div class="status-value" id="analysisStatus">未启动</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-title">主频率</div>
+                        <div class="status-value" id="dominantFrequency">0 Hz</div>
+                    </div>
+                </div>
+                
+                <div class="debug-info" id="debugInfo" style="display: none;">
+                    <div class="debug-title">
+                        <span>调试信息</span>
+                        <button id="toggleDebugBtn">隐藏调试信息</button>
+                    </div>
+                    <div id="debugContent">等待调试信息...</div>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>本地视频频谱分析器 &copy; 2023 | 基于Web Audio API | 所有处理均在浏览器本地完成</p>
+        </footer>
+    </div>
+
+    <script>
+        // DOM元素
+        const videoFileInput = document.getElementById('videoFileInput');
+        const uploadArea = document.getElementById('uploadArea');
+        const videoPlayer = document.getElementById('videoPlayer');
+        const videoPlaceholder = document.getElementById('videoPlaceholder');
+        const detectAudioBtn = document.getElementById('detectAudioBtn');
+        const startAnalysisBtn = document.getElementById('startAnalysisBtn');
+        const stopAnalysisBtn = document.getElementById('stopAnalysisBtn');
+        const spectrumCanvas = document.getElementById('spectrumCanvas');
+        const spectrumInfo = document.getElementById('spectrumInfo');
+        const fileStatus = document.getElementById('fileStatus');
+        const audioStatus = document.getElementById('audioStatus');
+        const analysisStatus = document.getElementById('analysisStatus');
+        const dominantFrequency = document.getElementById('dominantFrequency');
+        const debugInfo = document.getElementById('debugInfo');
+        const debugContent = document.getElementById('debugContent');
+        const toggleDebugBtn = document.getElementById('toggleDebugBtn');
+        
+        // 状态变量
+        let audioContext = null;
+        let analyserNode = null;
+        let sourceNode = null;
+        let dataArray = null;
+        let animationId = null;
+        let isAnalyzing = false;
+        let audioDetected = false;
+        
+        // 调试日志
+        const debugLog = [];
+        
+        function logDebug(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            debugLog.push(`[${timestamp}] ${message}`);
+            debugContent.textContent = debugLog.join('\n');
+            debugInfo.scrollTop = debugInfo.scrollHeight;
+        }
+        
+        // 初始化
+        function init() {
+            logDebug('页面初始化完成');
+            
+            // 文件上传区域点击事件
+            uploadArea.addEventListener('click', () => {
+                videoFileInput.click();
+            });
+            
+            // 拖拽上传支持
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.style.backgroundColor = 'rgba(52, 152, 219, 0.1)';
+            });
+            
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.style.backgroundColor = '';
+            });
+            
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.style.backgroundColor = '';
+                
+                if (e.dataTransfer.files.length) {
+                    handleVideoFile(e.dataTransfer.files[0]);
+                }
+            });
+            
+            // 文件选择事件
+            videoFileInput.addEventListener('change', (e) => {
+                if (e.target.files.length) {
+                    handleVideoFile(e.target.files[0]);
+                }
+            });
+            
+            // 按钮事件
+            detectAudioBtn.addEventListener('click', detectAudio);
+            startAnalysisBtn.addEventListener('click', startAnalysis);
+            stopAnalysisBtn.addEventListener('click', stopAnalysis);
+            toggleDebugBtn.addEventListener('click', () => {
+                debugInfo.style.display = debugInfo.style.display === 'none' ? 'block' : 'none';
+                toggleDebugBtn.textContent = debugInfo.style.display === 'none' ? '显示调试信息' : '隐藏调试信息';
+            });
+            
+            // 初始化频谱画布
+            const ctx = spectrumCanvas.getContext('2d');
+            spectrumCanvas.width = spectrumCanvas.clientWidth;
+            spectrumCanvas.height = spectrumCanvas.clientHeight;
+            
+            logDebug('事件监听器已设置');
+        }
+        
+        // 处理视频文件
+        function handleVideoFile(file) {
+            logDebug(`处理文件: ${file.name} (${file.type})`);
+            
+            if (!file.type.startsWith('video/')) {
+                alert('请选择视频文件！');
+                logDebug('错误：选择的文件不是视频格式');
+                return;
+            }
+            
+            // 创建对象URL
+            const videoURL = URL.createObjectURL(file);
+            videoPlayer.src = videoURL;
+            videoPlayer.style.display = 'block';
+            videoPlaceholder.style.display = 'none';
+            
+            // 更新状态
+            fileStatus.textContent = `${file.name} (${(file.size / (1024*1024)).toFixed(2)} MB)`;
+            audioStatus.textContent = '等待检测';
+            audioStatus.parentElement.className = 'status-item';
+            audioDetected = false;
+            
+            // 启用检测按钮
+            detectAudioBtn.disabled = false;
+            startAnalysisBtn.disabled = true;
+            stopAnalysisBtn.disabled = true;
+            
+            // 重置分析状态
+            analysisStatus.textContent = '未启动';
+            
+            logDebug(`视频已加载，对象URL: ${videoURL.substring(0, 50)}...`);
+            
+            // 监听视频加载完成
+            videoPlayer.addEventListener('loadedmetadata', () => {
+                logDebug(`视频元数据加载完成: ${videoPlayer.videoWidth}x${videoPlayer.videoHeight}, 时长: ${videoPlayer.duration.toFixed(2)}秒`);
+            });
+        }
+        
+        // 检测音频轨道
+        async function detectAudio() {
+            logDebug('开始音频轨道检测...');
+            audioStatus.textContent = '检测中...';
+            
+            try {
+                // 方法1: 检查标准属性
+                let hasAudio = false;
+                let detectionMethod = '';
+                
+                // 检查webkitAudioDecodedByteCount (Chrome/Safari)
+                if (videoPlayer.webkitAudioDecodedByteCount !== undefined) {
+                    hasAudio = videoPlayer.webkitAudioDecodedByteCount > 0;
+                    detectionMethod = 'webkitAudioDecodedByteCount';
+                    logDebug(`检测方法1: webkitAudioDecodedByteCount = ${videoPlayer.webkitAudioDecodedByteCount}`);
+                }
+                // 检查mozHasAudio (Firefox)
+                else if (videoPlayer.mozHasAudio !== undefined) {
+                    hasAudio = videoPlayer.mozHasAudio;
+                    detectionMethod = 'mozHasAudio';
+                    logDebug(`检测方法1: mozHasAudio = ${videoPlayer.mozHasAudio}`);
+                }
+                // 检查audioTracks
+                else if (videoPlayer.audioTracks && videoPlayer.audioTracks.length > 0) {
+                    hasAudio = videoPlayer.audioTracks.length > 0;
+                    detectionMethod = 'audioTracks';
+                    logDebug(`检测方法1: audioTracks.length = ${videoPlayer.audioTracks.length}`);
+                }
+                
+                // 方法2: 实际播放测试（更可靠）
+                if (!hasAudio) {
+                    logDebug('标准检测方法未发现音频，尝试实际播放测试...');
+                    
+                    try {
+                        // 初始化音频上下文（如果尚未初始化）
+                        if (!audioContext) {
+                            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                            logDebug(`创建AudioContext: 状态=${audioContext.state}, 采样率=${audioContext.sampleRate}Hz`);
+                        }
+                        
+                        // 创建临时分析器
+                        const tempAnalyser = audioContext.createAnalyser();
+                        tempAnalyser.fftSize = 256;
+                        const tempData = new Uint8Array(tempAnalyser.frequencyBinCount);
+                        
+                        // 创建临时源节点
+                        const tempSource = audioContext.createMediaElementSource(videoPlayer);
+                        tempSource.connect(tempAnalyser);
+                        tempAnalyser.connect(audioContext.destination);
+                        
+                        // 保存当前播放状态和时间
+                        const wasPaused = videoPlayer.paused;
+                        const originalTime = videoPlayer.currentTime;
+                        
+                        // 尝试从视频的10%位置播放一小段
+                        videoPlayer.currentTime = Math.min(5, videoPlayer.duration * 0.1);
+                        videoPlayer.muted = false;
+                        videoPlayer.volume = 0.5;
+                        
+                        await videoPlayer.play();
+                        
+                        // 等待一小段时间让音频数据流动
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                        
+                        // 获取频谱数据
+                        tempAnalyser.getByteFrequencyData(tempData);
+                        
+                        // 停止播放并恢复原始状态
+                        videoPlayer.pause();
+                        videoPlayer.currentTime = originalTime;
+                        if (wasPaused) videoPlayer.pause();
+                        
+                        // 检查是否有音频信号
+                        const hasSignal = tempData.some(value => value > 10);
+                        logDebug(`实际播放测试: 检测到信号=${hasSignal}, 频谱样本=${tempData.slice(0, 5).join(', ')}`);
+                        
+                        if (hasSignal) {
+                            hasAudio = true;
+                            detectionMethod = '实际播放测试';
+                        }
+                        
+                        // 断开临时连接
+                        tempSource.disconnect();
+                        
+                    } catch (playError) {
+                        logDebug(`实际播放测试失败: ${playError.message}`);
+                    }
+                }
+                
+                // 更新状态显示
+                audioDetected = hasAudio;
+                
+                if (hasAudio) {
+                    audioStatus.textContent = `检测到音频 (${detectionMethod})`;
+                    audioStatus.parentElement.className = 'status-item audio-detected';
+                    logDebug(`✅ 音频检测成功: 使用${detectionMethod}方法`);
+                    
+                    // 启用分析按钮
+                    startAnalysisBtn.disabled = false;
+                } else {
+                    audioStatus.textContent = '未检测到音频轨道';
+                    audioStatus.parentElement.className = 'status-item audio-not-detected';
+                    logDebug('❌ 音频检测失败: 所有方法均未检测到音频信号');
+                    
+                    // 显示提示
+                    alert('未检测到音频轨道。这可能是因为：\n1. 视频文件不包含音频\n2. 音频编码不被浏览器支持\n3. 浏览器限制\n\n请使用系统播放器确认视频是否有声音。');
+                }
+                
+            } catch (error) {
+                logDebug(`音频检测过程中出错: ${error.message}`);
+                audioStatus.textContent = '检测出错';
+                alert('音频检测过程中出错: ' + error.message);
+            }
+        }
+        
+        // 开始频谱分析
+        async function startAnalysis() {
+            if (!audioDetected) {
+                alert('请先检测音频轨道！');
+                return;
+            }
+            
+            logDebug('开始频谱分析...');
+            
+            try {
+                // 初始化音频上下文（如果尚未初始化）
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    logDebug(`创建AudioContext: 状态=${audioContext.state}, 采样率=${audioContext.sampleRate}Hz`);
+                }
+                
+                // 恢复音频上下文（如果被暂停）
+                if (audioContext.state === 'suspended') {
+                    await audioContext.resume();
+                    logDebug(`AudioContext已恢复: 状态=${audioContext.state}`);
+                }
+                
+                // 创建分析器节点
+                analyserNode = audioContext.createAnalyser();
+                analyserNode.fftSize = 2048;
+                analyserNode.smoothingTimeConstant = 0.8;
+                analyserNode.minDecibels = -100;
+                analyserNode.maxDecibels = -30;
+                
+                // 创建源节点
+                sourceNode = audioContext.createMediaElementSource(videoPlayer);
+                
+                // 连接节点: 源 -> 分析器 -> 目的地
+                sourceNode.connect(analyserNode);
+                analyserNode.connect(audioContext.destination);
+                
+                // 初始化数据数组
+                dataArray = new Uint8Array(analyserNode.frequencyBinCount);
+                
+                // 更新状态
+                isAnalyzing = true;
+                analysisStatus.textContent = '分析中...';
+                
+                // 启用/禁用按钮
+                startAnalysisBtn.disabled = true;
+                stopAnalysisBtn.disabled = false;
+                detectAudioBtn.disabled = true;
+                
+                // 开始播放视频（如果尚未播放）
+                if (videoPlayer.paused) {
+                    videoPlayer.muted = false;
+                    await videoPlayer.play();
+                }
+                
+                // 开始绘制频谱
+                drawSpectrum();
+                
+                logDebug('频谱分析已启动');
+                logDebug(`分析器参数: fftSize=${analyserNode.fftSize}, 频率槽数量=${analyserNode.frequencyBinCount}`);
+                
+            } catch (error) {
+                logDebug(`启动频谱分析失败: ${error.message}`);
+                alert('启动频谱分析失败: ' + error.message);
+            }
+        }
+        
+        // 停止频谱分析
+        function stopAnalysis() {
+            isAnalyzing = false;
+            
+            // 停止动画帧
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            
+            // 暂停视频
+            if (videoPlayer && !videoPlayer.paused) {
+                videoPlayer.pause();
+            }
+            
+            // 更新状态
+            analysisStatus.textContent = '已停止';
+            
+            // 启用/禁用按钮
+            startAnalysisBtn.disabled = false;
+            stopAnalysisBtn.disabled = true;
+            detectAudioBtn.disabled = false;
+            
+            logDebug('频谱分析已停止');
+        }
+        
+        // 绘制频谱
+        function drawSpectrum() {
+            if (!isAnalyzing || !analyserNode || !dataArray) {
+                return;
+            }
+            
+            // 获取频谱数据
+            analyserNode.getByteFrequencyData(dataArray);
+            
+            // 获取画布上下文
+            const ctx = spectrumCanvas.getContext('2d');
+            const width = spectrumCanvas.width;
+            const height = spectrumCanvas.height;
+            
+            // 清除画布
+            ctx.fillStyle = 'rgb(0, 0, 0)';
+            ctx.fillRect(0, 0, width, height);
+            
+            // 检查是否有音频数据
+            const maxValue = Math.max(...dataArray);
+            if (maxValue === 0) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.font = '18px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('未检测到音频信号', width / 2, height / 2);
+                ctx.font = '14px Arial';
+                ctx.fillText('请确认视频包含音频且已开始播放', width / 2, height / 2 + 30);
+                
+                spectrumInfo.textContent = '无音频信号';
+                dominantFrequency.textContent = '0 Hz';
+                
+                // 继续动画
+                animationId = requestAnimationFrame(drawSpectrum);
+                return;
+            }
+            
+            // 计算主频率
+            let maxIndex = 0;
+            for (let i = 1; i < dataArray.length; i++) {
+                if (dataArray[i] > dataArray[maxIndex]) {
+                    maxIndex = i;
+                }
+            }
+            
+            // 计算频率
+            const sampleRate = audioContext.sampleRate;
+            const freqResolution = sampleRate / analyserNode.fftSize;
+            const dominantFreq = maxIndex * freqResolution;
+            
+            // 更新显示信息
+            spectrumInfo.textContent = `频率范围: 0-${Math.round(sampleRate/2)}Hz | 主频: ${dominantFreq.toFixed(1)}Hz`;
+            dominantFrequency.textContent = `${dominantFreq.toFixed(1)} Hz`;
+            
+            // 绘制频谱
+            const barWidth = width / dataArray.length;
+            const barHeightScale = height / 256;
+            
+            for (let i = 0; i < dataArray.length; i++) {
+                const value = dataArray[i];
+                const barHeight = value * barHeightScale;
+                
+                // 根据频率选择颜色
+                const hue = (i / dataArray.length) * 300;
+                const saturation = 80 + (value / 255) * 20;
+                const lightness = 30 + (value / 255) * 40;
+                
+                ctx.fillStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+                
+                const x = i * barWidth;
+                const y = height - barHeight;
+                
+                ctx.fillRect(x, y, barWidth - 1, barHeight);
+            }
+            
+            // 绘制频率刻度
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.lineWidth = 1;
+            ctx.font = '10px Arial';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            
+            // 绘制主要频率标记
+            const frequencies = [100, 500, 1000, 2000, 5000, 10000, 15000];
+            for (const freq of frequencies) {
+                if (freq <= sampleRate / 2) {
+                    const x = (freq / (sampleRate / 2)) * width;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, height);
+                    ctx.stroke();
+                    
+                    const label = freq >= 1000 ? `${freq/1000}kHz` : `${freq}Hz`;
+                    ctx.fillText(label, x + 2, height - 5);
+                }
+            }
+            
+            // 继续动画
+            animationId = requestAnimationFrame(drawSpectrum);
+        }
+        
+        // 页面卸载时清理资源
+        window.addEventListener('beforeunload', () => {
+            stopAnalysis();
+            
+            if (audioContext) {
+                audioContext.close();
+                logDebug('AudioContext已关闭');
+            }
+        });
+        
+        // 窗口大小改变时调整画布
+        window.addEventListener('resize', () => {
+            if (spectrumCanvas) {
+                spectrumCanvas.width = spectrumCanvas.clientWidth;
+                spectrumCanvas.height = spectrumCanvas.clientHeight;
+            }
+        });
+        
+        // 初始化应用
+        init();
+    </script>
+</body>
+</html>
