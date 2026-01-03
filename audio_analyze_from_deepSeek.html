@@ -1,0 +1,1350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>专业音频频谱分析器</title>
+    <style>
+        /* 原有样式保持不变，新增以下样式 */
+        
+        /* 步进控制和离线计算区域 */
+        .step-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 20px;
+            align-items: center;
+        }
+        
+        .step-control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex: 1;
+            min-width: 150px;
+        }
+        
+        /* 频谱数据表格 */
+        .spectrum-table-container {
+            width: 100%;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 20px;
+            border-radius: 10px;
+            border: 1px solid #dfe6e9;
+            background: linear-gradient(to bottom, #ffffff, #f8f9fa);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+        }
+        
+        .spectrum-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .spectrum-table th {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            padding: 12px 15px;
+            text-align: left;
+            position: sticky;
+            top: 0;
+            font-weight: 600;
+            border-bottom: 2px solid #2c3e50;
+        }
+        
+        .spectrum-table td {
+            padding: 10px 15px;
+            border-bottom: 1px solid #eee;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9rem;
+        }
+        
+        .spectrum-table tr:nth-child(even) {
+            background-color: rgba(52, 152, 219, 0.05);
+        }
+        
+        .spectrum-table tr:hover {
+            background-color: rgba(52, 152, 219, 0.1);
+        }
+        
+        .frequency-cell {
+            color: #2c3e50;
+            font-weight: 600;
+        }
+        
+        .amplitude-cell {
+            color: #e74c3c;
+            font-weight: 600;
+        }
+        
+        /* 步进播放按钮 */
+        .btn-step {
+            background: linear-gradient(135deg, #9b59b6, #8e44ad);
+            box-shadow: 0 4px 15px rgba(155, 89, 182, 0.3);
+        }
+        
+        .btn-offline {
+            background: linear-gradient(135deg, #1abc9c, #16a085);
+            box-shadow: 0 4px 15px rgba(26, 188, 156, 0.3);
+        }
+        
+        .btn-resume {
+            background: linear-gradient(135deg, #f39c12, #d35400);
+            box-shadow: 0 4px 15px rgba(243, 156, 18, 0.3);
+        }
+        
+        /* 离线计算状态 */
+        .offline-status {
+            background: linear-gradient(135deg, #1abc9c, #16a085);
+            color: white;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            display: none;
+            animation: pulse 2s infinite;
+        }
+        
+        .offline-progress {
+            height: 6px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        
+        .offline-progress-bar {
+            height: 100%;
+            background: white;
+            border-radius: 3px;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        
+        /* 暂停状态指示 */
+        .paused-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 1.2rem;
+            font-weight: 600;
+            display: none;
+            z-index: 10;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        
+        .paused-icon {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            display: block;
+            text-align: center;
+        }
+        
+        /* 频谱帧信息 */
+        .frame-info {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+            padding: 12px;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+        
+        .frame-info-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+        }
+        
+        .frame-info-label {
+            font-size: 0.85rem;
+            color: #7f8c8d;
+            margin-bottom: 5px;
+        }
+        
+        .frame-info-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #2c3e50;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        
+        /* 表格控制 */
+        .table-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .table-btn {
+            padding: 8px 16px;
+            background: #f8f9fa;
+            border: 2px solid #dfe6e9;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            color: #2c3e50;
+            transition: all 0.3s;
+            font-size: 0.9rem;
+        }
+        
+        .table-btn:hover {
+            background: #e9ecef;
+            transform: translateY(-2px);
+        }
+        
+        .table-btn.active {
+            background: #3498db;
+            color: white;
+            border-color: #3498db;
+        }
+        
+        .export-btn {
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
+            color: white;
+            border: none;
+        }
+        
+        .export-btn:hover {
+            background: linear-gradient(135deg, #27ae60, #219653);
+        }
+        
+        /* 响应式调整 */
+        @media (max-width: 768px) {
+            .spectrum-table th,
+            .spectrum-table td {
+                padding: 8px 10px;
+                font-size: 0.8rem;
+            }
+            
+            .frame-info {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .step-controls {
+                flex-direction: column;
+            }
+            
+            .step-control-group {
+                min-width: 100%;
+            }
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-wave-square"></i> 专业音频频谱分析器</h1>
+            <p class="subtitle">上传音频文件，实时分析频谱特征。支持MP3、WAV、OGG、FLAC等格式，完全在浏览器本地处理</p>
+        </header>
+        
+        <div class="main-content">
+            <!-- 上传面板 -->
+            <div class="panel upload-panel">
+                <h2><i class="fas fa-file-upload"></i> 1. 上传音频文件</h2>
+                <div class="file-upload-area" id="uploadArea">
+                    <div class="upload-icon">
+                        <i class="fas fa-file-audio"></i>
+                    </div>
+                    <p><strong>点击此处选择音频文件，或将文件拖拽到此区域</strong></p>
+                    <p style="font-size: 0.95rem; margin-top: 15px; color: #7f8c8d;">
+                        支持格式: MP3, WAV, OGG, FLAC, AAC, M4A等
+                    </p>
+                    <input type="file" id="audioFileInput" class="file-input" accept="audio/*">
+                </div>
+                
+                <div id="audioInfo" class="audio-info" style="display: none;">
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">文件名</div>
+                            <div class="info-value" id="fileName">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">文件大小</div>
+                            <div class="info-value" id="fileSize">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">音频时长</div>
+                            <div class="info-value" id="audioDuration">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">音频格式</div>
+                            <div class="info-value" id="audioFormat">-</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <audio id="audioPlayer" controls class="audio-player" style="display: none;"></audio>
+                
+                <div class="controls">
+                    <button id="playBtn" class="btn btn-play" disabled>
+                        <i class="fas fa-play"></i> 播放
+                    </button>
+                    <button id="pauseBtn" class="btn" disabled>
+                        <i class="fas fa-pause"></i> 暂停
+                    </button>
+                    <button id="analyzeBtn" class="btn btn-analyze" disabled>
+                        <i class="fas fa-chart-line"></i> 开始分析
+                    </button>
+                </div>
+                
+                <!-- 新增：离线计算按钮 -->
+                <div class="controls" style="margin-top: 15px;">
+                    <button id="offlineAnalyzeBtn" class="btn btn-offline" disabled>
+                        <i class="fas fa-database"></i> 离线频谱预计算
+                    </button>
+                </div>
+                
+                <!-- 新增：离线计算状态 -->
+                <div id="offlineStatus" class="offline-status">
+                    <div id="offlineStatusText">
+                        <i class="fas fa-sync fa-spin"></i> 离线计算中...
+                    </div>
+                    <div class="offline-progress">
+                        <div id="offlineProgressBar" class="offline-progress-bar"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 分析控制面板 -->
+            <div class="panel controls-panel">
+                <h2><i class="fas fa-sliders-h"></i> 2. 分析控制</h2>
+                
+                <div class="analysis-controls">
+                    <div class="control-group">
+                        <div class="control-label">
+                            <span>FFT大小</span>
+                            <span class="control-value" id="fftValue">2048</span>
+                        </div>
+                        <input type="range" id="fftSlider" class="slider" min="128" max="8192" step="128" value="2048">
+                        <div style="font-size: 0.85rem; color: #7f8c8d; margin-top: 5px;">
+                            影响频率分辨率：值越大，频率分辨率越高
+                        </div>
+                    </div>
+                    
+                    <div class="control-group">
+                        <div class="control-label">
+                            <span>平滑系数</span>
+                            <span class="control-value" id="smoothingValue">0.7</span>
+                        </div>
+                        <input type="range" id="smoothingSlider" class="slider" min="0" max="1" step="0.05" value="0.7">
+                        <div style="font-size: 0.85rem; color: #7f8c8d; margin-top: 5px;">
+                            影响频谱平滑度：值越大，频谱变化越平滑
+                        </div>
+                    </div>
+                    
+                    <div class="control-group">
+                        <div class="control-label">
+                            <span>灵敏度</span>
+                            <span class="control-value" id="sensitivityValue">80%</span>
+                        </div>
+                        <input type="range" id="sensitivitySlider" class="slider" min="10" max="100" step="1" value="80">
+                        <div style="font-size: 0.85rem; color: #7f8c8d; margin-top: 5px;">
+                            影响频谱显示灵敏度：值越大，弱信号越明显
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 新增：步进间隔控制 -->
+                <div class="step-controls">
+                    <div class="step-control-group">
+                        <div class="control-label">
+                            <span>步进间隔</span>
+                            <span class="control-value" id="stepIntervalValue">1.0 秒</span>
+                        </div>
+                        <input type="range" id="stepIntervalSlider" class="slider" min="0.1" max="5" step="0.1" value="1.0">
+                        <div style="font-size: 0.85rem; color: #7f8c8d; margin-top: 5px;">
+                            步进播放时每帧间隔时间
+                        </div>
+                    </div>
+                    
+                    <div class="step-control-group">
+                        <div class="control-label">
+                            <span>当前帧</span>
+                            <span class="control-value" id="currentFrameValue">0 / 0</span>
+                        </div>
+                        <input type="range" id="frameSlider" class="slider" min="0" max="100" step="1" value="0" disabled>
+                        <div style="font-size: 0.85rem; color: #7f8c8d; margin-top: 5px;">
+                            手动控制帧位置
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 新增：步进播放控制 -->
+                <div class="controls" style="margin-top: 15px;">
+                    <button id="stepPrevBtn" class="btn" disabled>
+                        <i class="fas fa-step-backward"></i> 上一帧
+                    </button>
+                    <button id="stepPlayBtn" class="btn btn-step" disabled>
+                        <i class="fas fa-forward"></i> 步进播放
+                    </button>
+                    <button id="stepNextBtn" class="btn" disabled>
+                        <i class="fas fa-step-forward"></i> 下一帧
+                    </button>
+                    <button id="stepPauseBtn" class="btn btn-resume" disabled>
+                        <i class="fas fa-pause"></i> 暂停/继续
+                    </button>
+                </div>
+                
+                <div class="frequency-bands">
+                    <div class="band band-sub">
+                        <div class="band-title">低频 (20-250Hz)</div>
+                        <div class="band-value" id="lowBandValue">0</div>
+                        <div class="band-unit">强度</div>
+                    </div>
+                    <div class="band band-mid">
+                        <div class="band-title">中频 (250-4kHz)</div>
+                        <div class="band-value" id="midBandValue">0</div>
+                        <div class="band-unit">强度</div>
+                    </div>
+                    <div class="band band-high">
+                        <div class="band-title">高频 (4k-20kHz)</div>
+                        <div class="band-value" id="highBandValue">0</div>
+                        <div class="band-unit">强度</div>
+                    </div>
+                </div>
+                
+                <!-- 新增：频谱帧信息 -->
+                <div id="frameInfo" class="frame-info" style="display: none;">
+                    <div class="frame-info-item">
+                        <div class="frame-info-label">当前时间</div>
+                        <div class="frame-info-value" id="currentTimeValue">00:00</div>
+                    </div>
+                    <div class="frame-info-item">
+                        <div class="frame-info-label">总帧数</div>
+                        <div class="frame-info-value" id="totalFramesValue">0</div>
+                    </div>
+                    <div class="frame-info-item">
+                        <div class="frame-info-label">帧间隔</div>
+                        <div class="frame-info-value" id="frameStepValue">0 ms</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 频谱可视化面板 -->
+            <div class="panel visualization-panel">
+                <h2><i class="fas fa-chart-bar"></i> 3. 频谱可视化</h2>
+                
+                <div class="visualization-container">
+                    <canvas id="spectrumCanvas"></canvas>
+                    <!-- 新增：暂停状态指示 -->
+                    <div id="pausedIndicator" class="paused-indicator">
+                        <div class="paused-icon">
+                            <i class="fas fa-pause"></i>
+                        </div>
+                        <div>频谱已暂停</div>
+                    </div>
+                    <div class="visualization-overlay">
+                        <div class="spectrum-info" id="spectrumInfo">
+                            频率范围: 0-0 Hz | 分辨率: 0 Hz
+                        </div>
+                        <div class="time-display" id="timeDisplay">
+                            00:00 / 00:00
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="waveform-container">
+                    <canvas id="waveformCanvas"></canvas>
+                    <div class="waveform-overlay">
+                        <i class="fas fa-waveform"></i> 音频波形
+                    </div>
+                </div>
+                
+                <div class="visualization-types">
+                    <div class="vis-btn active" data-type="bars">条形频谱</div>
+                    <div class="vis-btn" data-type="wave">波形频谱</div>
+                    <div class="vis-btn" data-type="circle">环形频谱</div>
+                    <div class="vis-btn" data-type="gradient">渐变频谱</div>
+                </div>
+            </div>
+            
+            <!-- 状态面板 -->
+            <div class="panel status-panel">
+                <h2><i class="fas fa-info-circle"></i> 4. 分析状态与频谱数据</h2>
+                
+                <div class="status-indicators">
+                    <div class="status-indicator">
+                        <div class="indicator-icon audio">
+                            <i class="fas fa-volume-up"></i>
+                        </div>
+                        <div class="indicator-info">
+                            <div class="indicator-title">音频状态</div>
+                            <div class="indicator-value" id="audioStatusValue">未加载</div>
+                            <div class="indicator-subtext" id="audioStatusSub">等待音频文件</div>
+                        </div>
+                    </div>
+                    
+                    <div class="status-indicator">
+                        <div class="indicator-icon analysis">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <div class="indicator-info">
+                            <div class="indicator-title">分析状态</div>
+                            <div class="indicator-value" id="analysisStatusValue">待机</div>
+                            <div class="indicator-subtext" id="analysisStatusSub">点击"开始分析"按钮</div>
+                        </div>
+                    </div>
+                    
+                    <div class="status-indicator">
+                        <div class="indicator-icon frequency">
+                            <i class="fas fa-wave-square"></i>
+                        </div>
+                        <div class="indicator-info">
+                            <div class="indicator-title">主频率</div>
+                            <div class="indicator-value" id="dominantFreqValue">0 Hz</div>
+                            <div class="indicator-subtext" id="dominantFreqSub">当前最强频率成分</div>
+                        </div>
+                    </div>
+                    
+                    <div class="status-indicator">
+                        <div class="indicator-icon volume">
+                            <i class="fas fa-sliders-h"></i>
+                        </div>
+                        <div class="indicator-info">
+                            <div class="indicator-title">峰值音量</div>
+                            <div class="indicator-value" id="peakVolumeValue">-∞ dB</div>
+                            <div class="indicator-subtext" id="peakVolumeSub">当前音频峰值</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="progress-container" id="progressContainer" style="display: none;">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+                
+                <!-- 新增：频谱数据表格 -->
+                <div style="margin-top: 25px;">
+                    <div class="table-controls">
+                        <div class="table-btn active" data-table="all">显示全部</div>
+                        <div class="table-btn" data-table="low">低频段</div>
+                        <div class="table-btn" data-table="mid">中频段</div>
+                        <div class="table-btn" data-table="high">高频段</div>
+                        <div class="table-btn" data-table="peak">峰值频率</div>
+                        <button id="exportTableBtn" class="table-btn export-btn">
+                            <i class="fas fa-download"></i> 导出数据
+                        </button>
+                    </div>
+                    
+                    <div class="spectrum-table-container">
+                        <table class="spectrum-table" id="spectrumTable">
+                            <thead>
+                                <tr>
+                                    <th>频率 (Hz)</th>
+                                    <th>幅度 (0-255)</th>
+                                    <th>分贝值 (dB)</th>
+                                    <th>频段</th>
+                                    <th>百分比 (%)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="spectrumTableBody">
+                                <!-- 频谱数据将通过JavaScript动态填充 -->
+                                <tr>
+                                    <td colspan="5" style="text-align: center; padding: 40px;">
+                                        <i class="fas fa-wave-square" style="font-size: 2rem; color: #bdc3c7; margin-bottom: 10px; display: block;"></i>
+                                        <div>频谱数据将在分析开始后显示</div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div id="errorMessage" class="error-message">
+                    <i class="fas fa-exclamation-triangle"></i> <span id="errorText"></span>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>专业音频频谱分析器 &copy; 2023 | 基于Web Audio API | 所有处理均在浏览器本地完成，保障隐私安全</p>
+            <p style="margin-top: 10px; font-size: 0.8rem;">
+                <i class="fas fa-shield-alt"></i> 隐私提示：您的音频文件不会上传到任何服务器，所有分析均在您的设备上完成
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        // ==================== DOM元素引用 ====================
+        // 原有元素保持不变
+        // 新增元素引用
+        const offlineAnalyzeBtn = document.getElementById('offlineAnalyzeBtn');
+        const offlineStatus = document.getElementById('offlineStatus');
+        const offlineProgressBar = document.getElementById('offlineProgressBar');
+        const offlineStatusText = document.getElementById('offlineStatusText');
+        const stepIntervalSlider = document.getElementById('stepIntervalSlider');
+        const stepIntervalValue = document.getElementById('stepIntervalValue');
+        const frameSlider = document.getElementById('frameSlider');
+        const currentFrameValue = document.getElementById('currentFrameValue');
+        const stepPrevBtn = document.getElementById('stepPrevBtn');
+        const stepPlayBtn = document.getElementById('stepPlayBtn');
+        const stepNextBtn = document.getElementById('stepNextBtn');
+        const stepPauseBtn = document.getElementById('stepPauseBtn');
+        const pausedIndicator = document.getElementById('pausedIndicator');
+        const frameInfo = document.getElementById('frameInfo');
+        const currentTimeValue = document.getElementById('currentTimeValue');
+        const totalFramesValue = document.getElementById('totalFramesValue');
+        const frameStepValue = document.getElementById('frameStepValue');
+        const spectrumTableBody = document.getElementById('spectrumTableBody');
+        const exportTableBtn = document.getElementById('exportTableBtn');
+        const tableBtns = document.querySelectorAll('.table-btn[data-table]');
+
+        // ==================== 新增状态变量 ====================
+        let offlineSpectrumData = []; // 存储预计算的频谱数据
+        let isOfflineMode = false; // 是否处于离线模式
+        let offlineAnalysisComplete = false; // 离线分析是否完成
+        let currentFrameIndex = 0; // 当前帧索引
+        let totalFrames = 0; // 总帧数
+        let frameStepInterval = null; // 步进播放定时器
+        let isStepPlaying = false; // 是否正在步进播放
+        let isPaused = false; // 是否暂停
+        let lastSpectrumData = null; // 暂停时保留的最后一帧数据
+        let audioBuffer = null; // 音频缓冲区（用于离线分析）
+        let tableDisplayMode = 'all'; // 表格显示模式
+
+        // ==================== 初始化函数扩展 ====================
+        function init() {
+            console.log('音频频谱分析器初始化...');
+            
+            // 设置画布尺寸
+            updateCanvasSizes();
+            
+            // 设置事件监听器
+            setupEventListeners();
+            
+            // 初始化Web Audio API
+            initAudioContext();
+            
+            // 更新状态
+            updateStatus('ready', '等待音频文件上传');
+            
+            console.log('初始化完成');
+        }
+
+        // ==================== 事件监听器设置扩展 ====================
+        function setupEventListeners() {
+            // 原有事件监听器保持不变
+            
+            // 新增事件监听器
+            offlineAnalyzeBtn.addEventListener('click', startOfflineAnalysis);
+            stepIntervalSlider.addEventListener('input', updateStepInterval);
+            frameSlider.addEventListener('input', handleFrameSliderChange);
+            stepPrevBtn.addEventListener('click', stepToPreviousFrame);
+            stepPlayBtn.addEventListener('click', toggleStepPlay);
+            stepNextBtn.addEventListener('click', stepToNextFrame);
+            stepPauseBtn.addEventListener('click', togglePause);
+            exportTableBtn.addEventListener('click', exportTableData);
+            
+            // 表格显示模式按钮
+            tableBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    tableBtns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    tableDisplayMode = btn.dataset.table;
+                    updateSpectrumTable();
+                });
+            });
+        }
+
+        // ==================== 新增：离线频谱预计算 ====================
+        async function startOfflineAnalysis() {
+            if (!currentAudioFile || !audioContext) {
+                showError('请先上传音频文件');
+                return;
+            }
+            
+            console.log('开始离线频谱预计算...');
+            
+            // 显示离线计算状态
+            offlineStatus.style.display = 'block';
+            offlineStatusText.innerHTML = '<i class="fas fa-sync fa-spin"></i> 离线计算中...';
+            offlineAnalyzeBtn.disabled = true;
+            
+            try {
+                // 读取音频文件
+                const arrayBuffer = await currentAudioFile.arrayBuffer();
+                
+                // 解码音频数据
+                audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                
+                // 获取音频参数
+                const sampleRate = audioBuffer.sampleRate;
+                const duration = audioBuffer.duration;
+                const channelCount = audioBuffer.numberOfChannels;
+                
+                console.log(`音频参数: 采样率=${sampleRate}Hz, 时长=${duration}s, 声道数=${channelCount}`);
+                
+                // 计算总帧数
+                const fftSize = parseInt(fftSlider.value);
+                const frameDuration = parseFloat(stepIntervalSlider.value); // 秒
+                totalFrames = Math.floor(duration / frameDuration);
+                
+                // 更新帧信息显示
+                updateFrameInfo(totalFrames, frameDuration);
+                
+                // 创建离线音频上下文
+                const offlineContext = new OfflineAudioContext(
+                    channelCount,
+                    duration * sampleRate,
+                    sampleRate
+                );
+                
+                // 创建音频源节点
+                const source = offlineContext.createBufferSource();
+                source.buffer = audioBuffer;
+                
+                // 创建分析器节点
+                const analyser = offlineContext.createAnalyser();
+                analyser.fftSize = fftSize;
+                analyser.smoothingTimeConstant = parseFloat(smoothingSlider.value);
+                
+                // 连接节点
+                source.connect(analyser);
+                analyser.connect(offlineContext.destination);
+                
+                // 开始播放
+                source.start(0);
+                
+                // 预计算频谱数据
+                offlineSpectrumData = [];
+                
+                // 使用ScriptProcessorNode捕获每一帧数据
+                // 注意：ScriptProcessorNode已废弃，但离线分析中仍可使用
+                const bufferSize = 2048;
+                const processor = offlineContext.createScriptProcessor(bufferSize, 1, 1);
+                
+                let frameCount = 0;
+                let lastProcessTime = 0;
+                
+                processor.onaudioprocess = function(e) {
+                    const currentTime = offlineContext.currentTime;
+                    
+                    // 每frameDuration秒处理一帧
+                    if (currentTime - lastProcessTime >= frameDuration) {
+                        lastProcessTime = currentTime;
+                        
+                        if (frameCount < totalFrames) {
+                            // 获取频谱数据
+                            const frequencyData = new Uint8Array(analyser.frequencyBinCount);
+                            analyser.getByteFrequencyData(frequencyData);
+                            
+                            // 存储数据
+                            offlineSpectrumData.push({
+                                time: currentTime,
+                                frequencyData: new Uint8Array(frequencyData),
+                                frameIndex: frameCount
+                            });
+                            
+                            // 更新进度
+                            const progress = (frameCount + 1) / totalFrames * 100;
+                            offlineProgressBar.style.width = `${progress}%`;
+                            offlineStatusText.innerHTML = 
+                                `<i class="fas fa-sync fa-spin"></i> 计算中... ${frameCount + 1}/${totalFrames} 帧`;
+                            
+                            frameCount++;
+                        }
+                    }
+                };
+                
+                analyser.connect(processor);
+                processor.connect(offlineContext.destination);
+                
+                // 开始渲染
+                await offlineContext.startRendering();
+                
+                // 计算完成
+                offlineAnalysisComplete = true;
+                isOfflineMode = true;
+                
+                offlineStatusText.innerHTML = 
+                    `<i class="fas fa-check-circle"></i> 离线计算完成！共 ${totalFrames} 帧`;
+                
+                // 启用步进控制
+                enableStepControls();
+                
+                // 显示帧信息
+                frameInfo.style.display = 'flex';
+                
+                // 更新频谱表
+                updateSpectrumTable();
+                
+                console.log(`离线频谱预计算完成，共 ${totalFrames} 帧`);
+                
+                // 3秒后隐藏状态
+                setTimeout(() => {
+                    offlineStatus.style.display = 'none';
+                    offlineAnalyzeBtn.disabled = false;
+                }, 3000);
+                
+            } catch (error) {
+                console.error('离线分析失败:', error);
+                showError(`离线分析失败: ${error.message}`);
+                offlineStatus.style.display = 'none';
+                offlineAnalyzeBtn.disabled = false;
+            }
+        }
+
+        // ==================== 新增：步进播放控制 ====================
+        function updateStepInterval() {
+            const value = parseFloat(stepIntervalSlider.value);
+            stepIntervalValue.textContent = `${value.toFixed(1)} 秒`;
+            
+            if (offlineAnalysisComplete && isOfflineMode) {
+                // 重新计算总帧数
+                const duration = audioBuffer ? audioBuffer.duration : audioPlayer.duration;
+                totalFrames = Math.floor(duration / value);
+                updateFrameInfo(totalFrames, value);
+                
+                // 重置当前帧位置
+                currentFrameIndex = Math.min(currentFrameIndex, totalFrames - 1);
+                updateFrameSlider();
+            }
+        }
+
+        function enableStepControls() {
+            stepPrevBtn.disabled = false;
+            stepPlayBtn.disabled = false;
+            stepNextBtn.disabled = false;
+            stepPauseBtn.disabled = false;
+            frameSlider.disabled = false;
+            
+            // 设置帧滑块范围
+            frameSlider.max = totalFrames - 1;
+            updateFrameSlider();
+        }
+
+        function updateFrameInfo(total, frameDuration) {
+            totalFramesValue.textContent = total;
+            frameStepValue.textContent = `${(frameDuration * 1000).toFixed(0)} ms`;
+        }
+
+        function updateFrameSlider() {
+            frameSlider.value = currentFrameIndex;
+            currentFrameValue.textContent = `${currentFrameIndex + 1} / ${totalFrames}`;
+            
+            // 更新当前时间显示
+            const frameDuration = parseFloat(stepIntervalSlider.value);
+            const currentTime = currentFrameIndex * frameDuration;
+            const minutes = Math.floor(currentTime / 60);
+            const seconds = Math.floor(currentTime % 60);
+            currentTimeValue.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        function handleFrameSliderChange() {
+            if (!isOfflineMode || !offlineAnalysisComplete) return;
+            
+            currentFrameIndex = parseInt(frameSlider.value);
+            updateFrameSlider();
+            displayOfflineFrame(currentFrameIndex);
+        }
+
+        function stepToPreviousFrame() {
+            if (currentFrameIndex > 0) {
+                currentFrameIndex--;
+                updateFrameSlider();
+                displayOfflineFrame(currentFrameIndex);
+            }
+        }
+
+        function stepToNextFrame() {
+            if (currentFrameIndex < totalFrames - 1) {
+                currentFrameIndex++;
+                updateFrameSlider();
+                displayOfflineFrame(currentFrameIndex);
+            }
+        }
+
+        function toggleStepPlay() {
+            if (!isStepPlaying) {
+                startStepPlay();
+            } else {
+                stopStepPlay();
+            }
+        }
+
+        function startStepPlay() {
+            if (!isOfflineMode || !offlineAnalysisComplete) return;
+            
+            isStepPlaying = true;
+            stepPlayBtn.innerHTML = '<i class="fas fa-stop"></i> 停止步进';
+            stepPlayBtn.classList.add('btn-stop');
+            
+            // 设置步进定时器
+            const stepInterval = parseFloat(stepIntervalSlider.value) * 1000;
+            frameStepInterval = setInterval(() => {
+                if (currentFrameIndex < totalFrames - 1) {
+                    currentFrameIndex++;
+                    updateFrameSlider();
+                    displayOfflineFrame(currentFrameIndex);
+                } else {
+                    stopStepPlay();
+                }
+            }, stepInterval);
+        }
+
+        function stopStepPlay() {
+            isStepPlaying = false;
+            stepPlayBtn.innerHTML = '<i class="fas fa-forward"></i> 步进播放';
+            stepPlayBtn.classList.remove('btn-stop');
+            
+            if (frameStepInterval) {
+                clearInterval(frameStepInterval);
+                frameStepInterval = null;
+            }
+        }
+
+        function togglePause() {
+            if (isPaused) {
+                resumeAnalysis();
+            } else {
+                pauseAnalysis();
+            }
+        }
+
+        function pauseAnalysis() {
+            isPaused = true;
+            stepPauseBtn.innerHTML = '<i class="fas fa-play"></i> 继续分析';
+            
+            // 显示暂停指示器
+            pausedIndicator.style.display = 'block';
+            
+            // 保存最后一帧数据
+            if (isOfflineMode && offlineAnalysisComplete) {
+                lastSpectrumData = offlineSpectrumData[currentFrameIndex];
+            } else if (frequencyData) {
+                lastSpectrumData = {
+                    frequencyData: new Uint8Array(frequencyData),
+                    time: audioPlayer.currentTime
+                };
+            }
+            
+            console.log('分析已暂停');
+        }
+
+        function resumeAnalysis() {
+            isPaused = false;
+            stepPauseBtn.innerHTML = '<i class="fas fa-pause"></i> 暂停分析';
+            
+            // 隐藏暂停指示器
+            pausedIndicator.style.display = 'none';
+            
+            // 清除保存的数据
+            lastSpectrumData = null;
+            
+            console.log('分析已继续');
+        }
+
+        function displayOfflineFrame(frameIndex) {
+            if (!offlineSpectrumData || offlineSpectrumData.length <= frameIndex) return;
+            
+            const frameData = offlineSpectrumData[frameIndex];
+            
+            // 更新频谱数据
+            frequencyData = frameData.frequencyData;
+            
+            // 绘制当前帧的频谱
+            drawCurrentFrameSpectrum();
+            
+            // 更新频谱表
+            updateSpectrumTable();
+        }
+
+        function drawCurrentFrameSpectrum() {
+            if (!frequencyData) return;
+            
+            // 根据选择的类型绘制频谱
+            switch (visualizationType) {
+                case 'bars':
+                    drawBarSpectrum();
+                    break;
+                case 'wave':
+                    drawWaveSpectrum();
+                    break;
+                case 'circle':
+                    drawCircleSpectrum();
+                    break;
+                case 'gradient':
+                    drawGradientSpectrum();
+                    break;
+            }
+            
+            // 更新频带信息
+            updateFrequencyBands();
+            
+            // 更新主频率和峰值音量
+            updateAudioMetrics();
+        }
+
+        // ==================== 修改原有的drawSpectrum函数 ====================
+        function drawSpectrum() {
+            // 如果处于暂停状态，绘制最后一帧并返回
+            if (isPaused && lastSpectrumData) {
+                drawPausedSpectrum();
+                return;
+            }
+            
+            if (!isAnalyzing || !analyserNode || !frequencyData) {
+                return;
+            }
+            
+            // 获取频谱数据
+            analyserNode.getByteFrequencyData(frequencyData);
+            
+            // 获取时域数据
+            analyserNode.getByteTimeDomainData(timeDomainData);
+            
+            // 根据选择的类型绘制频谱
+            switch (visualizationType) {
+                case 'bars':
+                    drawBarSpectrum();
+                    break;
+                case 'wave':
+                    drawWaveSpectrum();
+                    break;
+                case 'circle':
+                    drawCircleSpectrum();
+                    break;
+                case 'gradient':
+                    drawGradientSpectrum();
+                    break;
+            }
+            
+            // 绘制波形
+            drawWaveform();
+            
+            // 更新频带信息
+            updateFrequencyBands();
+            
+            // 更新主频率和峰值音量
+            updateAudioMetrics();
+            
+            // 更新进度条
+            updateProgressBar();
+            
+            // 更新频谱表
+            updateSpectrumTable();
+            
+            // 继续动画
+            animationId = requestAnimationFrame(drawSpectrum);
+        }
+
+        function drawPausedSpectrum() {
+            // 使用保存的最后一帧数据绘制频谱
+            if (lastSpectrumData && lastSpectrumData.frequencyData) {
+                frequencyData = lastSpectrumData.frequencyData;
+                
+                // 绘制频谱
+                switch (visualizationType) {
+                    case 'bars':
+                        drawBarSpectrum();
+                        break;
+                    case 'wave':
+                        drawWaveSpectrum();
+                        break;
+                    case 'circle':
+                        drawCircleSpectrum();
+                        break;
+                    case 'gradient':
+                        drawGradientSpectrum();
+                        break;
+                }
+                
+                // 更新频带信息
+                updateFrequencyBands();
+                
+                // 更新主频率和峰值音量
+                updateAudioMetrics();
+                
+                // 更新频谱表
+                updateSpectrumTable();
+            }
+            
+            // 继续动画（保持暂停状态）
+            animationId = requestAnimationFrame(drawSpectrum);
+        }
+
+        // ==================== 新增：频谱数据表格 ====================
+        function updateSpectrumTable() {
+            if (!frequencyData || frequencyData.length === 0) {
+                return;
+            }
+            
+            // 清空表格
+            spectrumTableBody.innerHTML = '';
+            
+            // 获取音频上下文参数
+            const sampleRate = audioContext ? audioContext.sampleRate : 44100;
+            const fftSize = parseInt(fftSlider.value);
+            const freqPerBin = sampleRate / 2 / frequencyData.length;
+            
+            // 计算要显示的数据
+            let displayData = [];
+            let maxAmplitude = 0;
+            
+            for (let i = 0; i < frequencyData.length; i++) {
+                const amplitude = frequencyData[i];
+                maxAmplitude = Math.max(maxAmplitude, amplitude);
+            }
+            
+            for (let i = 0; i < frequencyData.length; i++) {
+                const frequency = i * freqPerBin;
+                const amplitude = frequencyData[i];
+                const db = amplitude > 0 ? 20 * Math.log10(amplitude / 255) : -100;
+                const percentage = (amplitude / maxAmplitude) * 100;
+                
+                // 确定频段
+                let band = '';
+                if (frequency < 250) band = '低频';
+                else if (frequency < 4000) band = '中频';
+                else band = '高频';
+                
+                displayData.push({
+                    frequency,
+                    amplitude,
+                    db,
+                    band,
+                    percentage,
+                    index: i
+                });
+            }
+            
+            // 根据显示模式过滤数据
+            let filteredData = [];
+            switch (tableDisplayMode) {
+                case 'low':
+                    filteredData = displayData.filter(d => d.frequency < 250);
+                    break;
+                case 'mid':
+                    filteredData = displayData.filter(d => d.frequency >= 250 && d.frequency < 4000);
+                    break;
+                case 'high':
+                    filteredData = displayData.filter(d => d.frequency >= 4000);
+                    break;
+                case 'peak':
+                    // 取前20个峰值最高的频率
+                    filteredData = [...displayData]
+                        .sort((a, b) => b.amplitude - a.amplitude)
+                        .slice(0, 20);
+                    break;
+                default: // 'all'
+                    // 显示所有数据，但可以采样减少数量
+                    const step = Math.max(1, Math.floor(displayData.length / 50));
+                    filteredData = displayData.filter((_, index) => index % step === 0);
+                    break;
+            }
+            
+            // 填充表格
+            if (filteredData.length === 0) {
+                spectrumTableBody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 30px; color: #7f8c8d;">
+                            <i class="fas fa-info-circle"></i> 当前筛选条件下无数据
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            filteredData.forEach(data => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="frequency-cell">${data.frequency.toFixed(1)}</td>
+                    <td class="amplitude-cell">${data.amplitude}</td>
+                    <td>${data.db.toFixed(1)}</td>
+                    <td>
+                        <span style="
+                            display: inline-block;
+                            padding: 2px 8px;
+                            border-radius: 10px;
+                            font-size: 0.8rem;
+                            background-color: ${getBandColor(data.band)};
+                            color: white;
+                        ">
+                            ${data.band}
+                        </span>
+                    </td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div style="flex: 1; height: 6px; background: #ecf0f1; border-radius: 3px; overflow: hidden;">
+                                <div style="
+                                    height: 100%;
+                                    width: ${data.percentage}%;
+                                    background: linear-gradient(90deg, #3498db, #2ecc71);
+                                    border-radius: 3px;
+                                "></div>
+                            </div>
+                            <span>${data.percentage.toFixed(1)}%</span>
+                        </div>
+                    </td>
+                `;
+                spectrumTableBody.appendChild(row);
+            });
+        }
+
+        function getBandColor(band) {
+            switch (band) {
+                case '低频': return '#3498db';
+                case '中频': return '#2ecc71';
+                case '高频': return '#e74c3c';
+                default: return '#95a5a6';
+            }
+        }
+
+        function exportTableData() {
+            if (!frequencyData || frequencyData.length === 0) {
+                showError('没有可导出的数据');
+                return;
+            }
+            
+            try {
+                // 获取音频上下文参数
+                const sampleRate = audioContext ? audioContext.sampleRate : 44100;
+                const fftSize = parseInt(fftSlider.value);
+                const freqPerBin = sampleRate / 2 / frequencyData.length;
+                
+                // 准备数据
+                let csvContent = "频率(Hz),幅度(0-255),分贝值(dB),频段\n";
+                
+                for (let i = 0; i < frequencyData.length; i++) {
+                    const frequency = i * freqPerBin;
+                    const amplitude = frequencyData[i];
+                    const db = amplitude > 0 ? 20 * Math.log10(amplitude / 255) : -100;
+                    
+                    let band = '';
+                    if (frequency < 250) band = '低频';
+                    else if (frequency < 4000) band = '中频';
+                    else band = '高频';
+                    
+                    csvContent += `${frequency.toFixed(2)},${amplitude},${db.toFixed(2)},${band}\n`;
+                }
+                
+                // 创建下载链接
+                const blob = new Blob([csvContent], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `频谱数据_${new Date().getTime()}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                console.log('频谱数据导出成功');
+            } catch (error) {
+                console.error('导出失败:', error);
+                showError('数据导出失败: ' + error.message);
+            }
+        }
+
+        // ==================== 修改音频文件处理函数 ====================
+        function handleAudioFile(file) {
+            console.log(`处理音频文件: ${file.name}`);
+            
+            // 验证文件类型
+            if (!file.type.startsWith('audio/')) {
+                showError('请选择音频文件！支持MP3、WAV、OGG等格式。');
+                return;
+            }
+            
+            currentAudioFile = file;
+            
+            // 创建对象URL
+            const audioURL = URL.createObjectURL(file);
+            audioPlayer.src = audioURL;
+            
+            // 显示音频信息
+            displayAudioInfo(file);
+            
+            // 显示音频播放器和控制按钮
+            audioPlayer.style.display = 'block';
+            playBtn.disabled = false;
+            analyzeBtn.disabled = false;
+            offlineAnalyzeBtn.disabled = false;
+            progressContainer.style.display = 'block';
+            
+            // 重置离线分析状态
+            offlineAnalysisComplete = false;
+            isOfflineMode = false;
+            offlineSpectrumData = [];
+            currentFrameIndex = 0;
+            
+            // 隐藏步进控制
+            stepPrevBtn.disabled = true;
+            stepPlayBtn.disabled = true;
+            stepNextBtn.disabled = true;
+            stepPauseBtn.disabled = true;
+            frameSlider.disabled = true;
+            frameInfo.style.display = 'none';
+            
+            // 更新状态
+            updateStatus('file_loaded', `已加载: ${file.name}`);
+            
+            // 重置分析状态
+            isAnalyzing = false;
+            isPlaying = false;
+            isStepPlaying = false;
+            isPaused = false;
+            isSourceNodeCreated = false;
+            analyzeBtn.innerHTML = '<i class="fas fa-chart-line"></i> 开始分析';
+            analysisStatusValue.textContent = '待机';
+            analysisStatusSub.textContent = '点击"开始分析"按钮';
+            
+            // 停止步进播放
+            stopStepPlay();
+            
+            // 停止任何正在进行的分析
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            
+            // 清除频谱画布
+            clearCanvas(spectrumCanvas);
+            clearCanvas(waveformCanvas);
+            
+            console.log(`音频文件已加载: ${file.name}`);
+        }
+
+        // ==================== 页面初始化扩展 ====================
+        // 原有代码保持不变
+
+        // ==================== 工具函数 ====================
+        // 原有工具函数保持不变
+
+        // ==================== 页面初始化 ====================
+        // 页面加载完成后初始化
+        window.addEventListener('load', init);
+        
+        // 页面关闭前清理资源
+        window.addEventListener('beforeunload', () => {
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
+            
+            if (frameStepInterval) {
+                clearInterval(frameStepInterval);
+            }
+            
+            if (audioContext) {
+                audioContext.close();
+                console.log('AudioContext已关闭');
+            }
+            
+            // 清理对象URL
+            if (audioPlayer.src && audioPlayer.src.startsWith('blob:')) {
+                URL.revokeObjectURL(audioPlayer.src);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,1761 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>专业音频频谱分析器</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            line-height: 1.6;
+            color: #2c3e50;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+        }
+        
+        header {
+            background: linear-gradient(90deg, #3498db, #2c3e50);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            position: relative;
+        }
+        
+        header::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 5px;
+            background: linear-gradient(90deg, #f1c40f, #e74c3c, #9b59b6, #3498db);
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        .subtitle {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            max-width: 800px;
+            margin: 0 auto;
+            font-weight: 300;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            padding: 30px;
+        }
+        
+        @media (max-width: 1100px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .panel {
+            background: linear-gradient(to bottom right, #ffffff, #f8f9fa);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .panel:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.12);
+        }
+        
+        .panel h2 {
+            color: #2c3e50;
+            border-bottom: 3px solid;
+            padding-bottom: 12px;
+            margin-bottom: 25px;
+            font-size: 1.6rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .upload-panel h2 { border-color: #3498db; }
+        .analysis-panel h2 { border-color: #e74c3c; }
+        .visualization-panel h2 { border-color: #2ecc71; }
+        .controls-panel h2 { border-color: #f39c12; }
+        
+        .file-upload-area {
+            border: 3px dashed #3498db;
+            border-radius: 12px;
+            padding: 40px 30px;
+            text-align: center;
+            transition: all 0.3s;
+            cursor: pointer;
+            background-color: rgba(52, 152, 219, 0.03);
+            margin-bottom: 25px;
+        }
+        
+        .file-upload-area:hover {
+            background-color: rgba(52, 152, 219, 0.08);
+            border-color: #2980b9;
+            transform: scale(1.01);
+        }
+        
+        .file-upload-area.drag-over {
+            background-color: rgba(52, 152, 219, 0.15);
+            border-color: #1a5276;
+            border-style: solid;
+        }
+        
+        .upload-icon {
+            font-size: 4rem;
+            color: #3498db;
+            margin-bottom: 20px;
+            filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .audio-info {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            border-left: 5px solid #3498db;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .info-label {
+            font-size: 0.85rem;
+            color: #7f8c8d;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .info-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #2c3e50;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 25px;
+        }
+        
+        .btn {
+            padding: 14px 24px;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            flex-grow: 1;
+            min-width: 160px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 1rem;
+            box-shadow: 0 4px 15px rgba(106, 17, 203, 0.3);
+        }
+        
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 7px 20px rgba(106, 17, 203, 0.4);
+        }
+        
+        .btn:active {
+            transform: translateY(-1px);
+        }
+        
+        .btn:disabled {
+            background: linear-gradient(135deg, #bdc3c7, #95a5a6);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .btn-play {
+            background: linear-gradient(135deg, #00b09b, #96c93d);
+            box-shadow: 0 4px 15px rgba(0, 176, 155, 0.3);
+        }
+        
+        .btn-stop {
+            background: linear-gradient(135deg, #ff416c, #ff4b2b);
+            box-shadow: 0 4px 15px rgba(255, 65, 108, 0.3);
+        }
+        
+        .btn-analyze {
+            background: linear-gradient(135deg, #834d9b, #d04ed6);
+            box-shadow: 0 4px 15px rgba(131, 77, 155, 0.3);
+        }
+        
+        .visualization-container {
+            width: 100%;
+            height: 350px;
+            background: linear-gradient(to bottom, #0f0c29, #302b63, #24243e);
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+            margin-top: 15px;
+            box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.5);
+        }
+        
+        #spectrumCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        .visualization-overlay {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            right: 15px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+        }
+        
+        .spectrum-info {
+            color: white;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9rem;
+            backdrop-filter: blur(5px);
+        }
+        
+        .time-display {
+            color: white;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 1.1rem;
+            font-weight: 700;
+            backdrop-filter: blur(5px);
+        }
+        
+        .waveform-container {
+            width: 100%;
+            height: 150px;
+            background: linear-gradient(to bottom, #1a1a2e, #16213e);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 20px;
+            position: relative;
+        }
+        
+        #waveformCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        .waveform-overlay {
+            position: absolute;
+            bottom: 10px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9rem;
+        }
+        
+        .analysis-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 25px;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .control-label {
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 0.95rem;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .control-value {
+            font-weight: 700;
+            color: #3498db;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        
+        .slider {
+            width: 100%;
+            height: 8px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: linear-gradient(to right, #3498db, #2ecc71);
+            border-radius: 4px;
+            outline: none;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #fff;
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+            border: 2px solid #3498db;
+        }
+        
+        .frequency-bands {
+            display: flex;
+            gap: 15px;
+            margin-top: 25px;
+            flex-wrap: wrap;
+        }
+        
+        .band {
+            flex: 1;
+            min-width: 120px;
+            background: linear-gradient(to bottom, #f8f9fa, #e9ecef);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            border-top: 4px solid;
+            transition: transform 0.3s;
+        }
+        
+        .band:hover {
+            transform: translateY(-5px);
+        }
+        
+        .band-sub {
+            border-color: #3498db;
+        }
+        
+        .band-mid {
+            border-color: #2ecc71;
+        }
+        
+        .band-high {
+            border-color: #e74c3c;
+        }
+        
+        .band-title {
+            font-weight: 700;
+            margin-bottom: 8px;
+            font-size: 1rem;
+        }
+        
+        .band-value {
+            font-size: 1.3rem;
+            font-weight: 800;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        
+        .band-unit {
+            font-size: 0.8rem;
+            color: #7f8c8d;
+        }
+        
+        .status-panel {
+            grid-column: 1 / -1;
+            margin-top: 20px;
+        }
+        
+        .status-indicators {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px;
+            background: linear-gradient(135deg, #ffffff, #f8f9fa);
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+        }
+        
+        .indicator-icon {
+            font-size: 2rem;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            color: white;
+        }
+        
+        .indicator-icon.audio { background: linear-gradient(135deg, #3498db, #2980b9); }
+        .indicator-icon.analysis { background: linear-gradient(135deg, #2ecc71, #27ae60); }
+        .indicator-icon.frequency { background: linear-gradient(135deg, #9b59b6, #8e44ad); }
+        .indicator-icon.volume { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+        
+        .indicator-info {
+            flex: 1;
+        }
+        
+        .indicator-title {
+            font-weight: 600;
+            color: #7f8c8d;
+            font-size: 0.9rem;
+            margin-bottom: 5px;
+        }
+        
+        .indicator-value {
+            font-weight: 700;
+            font-size: 1.3rem;
+            color: #2c3e50;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        
+        .indicator-subtext {
+            font-size: 0.8rem;
+            color: #95a5a6;
+            margin-top: 3px;
+        }
+        
+        .visualization-types {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .vis-btn {
+            padding: 10px 20px;
+            background: #f8f9fa;
+            border: 2px solid #dfe6e9;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            color: #2c3e50;
+            transition: all 0.3s;
+        }
+        
+        .vis-btn:hover {
+            background: #e9ecef;
+            transform: translateY(-2px);
+        }
+        
+        .vis-btn.active {
+            background: #3498db;
+            color: white;
+            border-color: #3498db;
+            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+        }
+        
+        footer {
+            text-align: center;
+            padding: 25px;
+            color: #7f8c8d;
+            font-size: 0.9rem;
+            border-top: 1px solid #eee;
+            background: linear-gradient(to right, #f8f9fa, #e9ecef);
+        }
+        
+        .audio-player {
+            width: 100%;
+            margin-top: 20px;
+        }
+        
+        .audio-player::-webkit-media-controls-panel {
+            background: linear-gradient(to right, #3498db, #2c3e50);
+        }
+        
+        .audio-player::-webkit-media-controls-current-time-display,
+        .audio-player::-webkit-media-controls-time-remaining-display {
+            color: white;
+            font-weight: 600;
+        }
+        
+        .progress-container {
+            width: 100%;
+            height: 10px;
+            background-color: #ecf0f1;
+            border-radius: 5px;
+            margin-top: 20px;
+            overflow: hidden;
+            cursor: pointer;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #3498db, #2ecc71);
+            border-radius: 5px;
+            width: 0%;
+            transition: width 0.1s;
+        }
+        
+        .no-file-message {
+            text-align: center;
+            padding: 40px;
+            color: #95a5a6;
+            font-size: 1.1rem;
+        }
+        
+        .no-file-message i {
+            font-size: 3rem;
+            margin-bottom: 20px;
+            color: #bdc3c7;
+        }
+        
+        .error-message {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            display: none;
+            animation: fadeIn 0.5s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(52, 152, 219, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(52, 152, 219, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(52, 152, 219, 0); }
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-wave-square"></i> 专业音频频谱分析器</h1>
+            <p class="subtitle">上传音频文件，实时分析频谱特征。支持MP3、WAV、OGG、FLAC等格式，完全在浏览器本地处理</p>
+        </header>
+        
+        <div class="main-content">
+            <!-- 上传面板 -->
+            <div class="panel upload-panel">
+                <h2><i class="fas fa-file-upload"></i> 1. 上传音频文件</h2>
+                <div class="file-upload-area" id="uploadArea">
+                    <div class="upload-icon">
+                        <i class="fas fa-file-audio"></i>
+                    </div>
+                    <p><strong>点击此处选择音频文件，或将文件拖拽到此区域</strong></p>
+                    <p style="font-size: 0.95rem; margin-top: 15px; color: #7f8c8d;">
+                        支持格式: MP3, WAV, OGG, FLAC, AAC, M4A等
+                    </p>
+                    <input type="file" id="audioFileInput" class="file-input" accept="audio/*">
+                </div>
+                
+                <div id="audioInfo" class="audio-info" style="display: none;">
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">文件名</div>
+                            <div class="info-value" id="fileName">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">文件大小</div>
+                            <div class="info-value" id="fileSize">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">音频时长</div>
+                            <div class="info-value" id="audioDuration">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">音频格式</div>
+                            <div class="info-value" id="audioFormat">-</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <audio id="audioPlayer" controls class="audio-player" style="display: none;"></audio>
+                
+                <div class="controls">
+                    <button id="playBtn" class="btn btn-play" disabled>
+                        <i class="fas fa-play"></i> 播放
+                    </button>
+                    <button id="pauseBtn" class="btn" disabled>
+                        <i class="fas fa-pause"></i> 暂停
+                    </button>
+                    <button id="analyzeBtn" class="btn btn-analyze" disabled>
+                        <i class="fas fa-chart-line"></i> 开始分析
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 分析控制面板 -->
+            <div class="panel controls-panel">
+                <h2><i class="fas fa-sliders-h"></i> 2. 分析控制</h2>
+                
+                <div class="analysis-controls">
+                    <div class="control-group">
+                        <div class="control-label">
+                            <span>FFT大小</span>
+                            <span class="control-value" id="fftValue">2048</span>
+                        </div>
+                        <input type="range" id="fftSlider" class="slider" min="128" max="8192" step="128" value="2048">
+                        <div style="font-size: 0.85rem; color: #7f8c8d; margin-top: 5px;">
+                            影响频率分辨率：值越大，频率分辨率越高
+                        </div>
+                    </div>
+                    
+                    <div class="control-group">
+                        <div class="control-label">
+                            <span>平滑系数</span>
+                            <span class="control-value" id="smoothingValue">0.7</span>
+                        </div>
+                        <input type="range" id="smoothingSlider" class="slider" min="0" max="1" step="0.05" value="0.7">
+                        <div style="font-size: 0.85rem; color: #7f8c8d; margin-top: 5px;">
+                            影响频谱平滑度：值越大，频谱变化越平滑
+                        </div>
+                    </div>
+                    
+                    <div class="control-group">
+                        <div class="control-label">
+                            <span>灵敏度</span>
+                            <span class="control-value" id="sensitivityValue">80%</span>
+                        </div>
+                        <input type="range" id="sensitivitySlider" class="slider" min="10" max="100" step="1" value="80">
+                        <div style="font-size: 0.85rem; color: #7f8c8d; margin-top: 5px;">
+                            影响频谱显示灵敏度：值越大，弱信号越明显
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="frequency-bands">
+                    <div class="band band-sub">
+                        <div class="band-title">低频 (20-250Hz)</div>
+                        <div class="band-value" id="lowBandValue">0</div>
+                        <div class="band-unit">强度</div>
+                    </div>
+                    <div class="band band-mid">
+                        <div class="band-title">中频 (250-4kHz)</div>
+                        <div class="band-value" id="midBandValue">0</div>
+                        <div class="band-unit">强度</div>
+                    </div>
+                    <div class="band band-high">
+                        <div class="band-title">高频 (4k-20kHz)</div>
+                        <div class="band-value" id="highBandValue">0</div>
+                        <div class="band-unit">强度</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 频谱可视化面板 -->
+            <div class="panel visualization-panel">
+                <h2><i class="fas fa-chart-bar"></i> 3. 频谱可视化</h2>
+                
+                <div class="visualization-container">
+                    <canvas id="spectrumCanvas"></canvas>
+                    <div class="visualization-overlay">
+                        <div class="spectrum-info" id="spectrumInfo">
+                            频率范围: 0-0 Hz | 分辨率: 0 Hz
+                        </div>
+                        <div class="time-display" id="timeDisplay">
+                            00:00 / 00:00
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="waveform-container">
+                    <canvas id="waveformCanvas"></canvas>
+                    <div class="waveform-overlay">
+                        <i class="fas fa-waveform"></i> 音频波形
+                    </div>
+                </div>
+                
+                <div class="visualization-types">
+                    <div class="vis-btn active" data-type="bars">条形频谱</div>
+                    <div class="vis-btn" data-type="wave">波形频谱</div>
+                    <div class="vis-btn" data-type="circle">环形频谱</div>
+                    <div class="vis-btn" data-type="gradient">渐变频谱</div>
+                </div>
+            </div>
+            
+            <!-- 状态面板 -->
+            <div class="panel status-panel">
+                <h2><i class="fas fa-info-circle"></i> 4. 分析状态</h2>
+                
+                <div class="status-indicators">
+                    <div class="status-indicator">
+                        <div class="indicator-icon audio">
+                            <i class="fas fa-volume-up"></i>
+                        </div>
+                        <div class="indicator-info">
+                            <div class="indicator-title">音频状态</div>
+                            <div class="indicator-value" id="audioStatusValue">未加载</div>
+                            <div class="indicator-subtext" id="audioStatusSub">等待音频文件</div>
+                        </div>
+                    </div>
+                    
+                    <div class="status-indicator">
+                        <div class="indicator-icon analysis">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <div class="indicator-info">
+                            <div class="indicator-title">分析状态</div>
+                            <div class="indicator-value" id="analysisStatusValue">待机</div>
+                            <div class="indicator-subtext" id="analysisStatusSub">点击"开始分析"按钮</div>
+                        </div>
+                    </div>
+                    
+                    <div class="status-indicator">
+                        <div class="indicator-icon frequency">
+                            <i class="fas fa-wave-square"></i>
+                        </div>
+                        <div class="indicator-info">
+                            <div class="indicator-title">主频率</div>
+                            <div class="indicator-value" id="dominantFreqValue">0 Hz</div>
+                            <div class="indicator-subtext" id="dominantFreqSub">当前最强频率成分</div>
+                        </div>
+                    </div>
+                    
+                    <div class="status-indicator">
+                        <div class="indicator-icon volume">
+                            <i class="fas fa-sliders-h"></i>
+                        </div>
+                        <div class="indicator-info">
+                            <div class="indicator-title">峰值音量</div>
+                            <div class="indicator-value" id="peakVolumeValue">-∞ dB</div>
+                            <div class="indicator-subtext" id="peakVolumeSub">当前音频峰值</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="progress-container" id="progressContainer" style="display: none;">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+                
+                <div id="errorMessage" class="error-message">
+                    <i class="fas fa-exclamation-triangle"></i> <span id="errorText"></span>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>专业音频频谱分析器 &copy; 2023 | 基于Web Audio API | 所有处理均在浏览器本地完成，保障隐私安全</p>
+            <p style="margin-top: 10px; font-size: 0.8rem;">
+                <i class="fas fa-shield-alt"></i> 隐私提示：您的音频文件不会上传到任何服务器，所有分析均在您的设备上完成
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        // ==================== DOM元素引用 ====================
+        const audioFileInput = document.getElementById('audioFileInput');
+        const uploadArea = document.getElementById('uploadArea');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const playBtn = document.getElementById('playBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const spectrumCanvas = document.getElementById('spectrumCanvas');
+        const waveformCanvas = document.getElementById('waveformCanvas');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const errorMessage = document.getElementById('errorMessage');
+        const errorText = document.getElementById('errorText');
+        
+        // 信息显示元素
+        const audioInfo = document.getElementById('audioInfo');
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+        const audioDuration = document.getElementById('audioDuration');
+        const audioFormat = document.getElementById('audioFormat');
+        const spectrumInfo = document.getElementById('spectrumInfo');
+        const timeDisplay = document.getElementById('timeDisplay');
+        
+        // 状态显示元素
+        const audioStatusValue = document.getElementById('audioStatusValue');
+        const audioStatusSub = document.getElementById('audioStatusSub');
+        const analysisStatusValue = document.getElementById('analysisStatusValue');
+        const analysisStatusSub = document.getElementById('analysisStatusSub');
+        const dominantFreqValue = document.getElementById('dominantFreqValue');
+        const dominantFreqSub = document.getElementById('dominantFreqSub');
+        const peakVolumeValue = document.getElementById('peakVolumeValue');
+        const peakVolumeSub = document.getElementById('peakVolumeSub');
+        
+        // 频带显示元素
+        const lowBandValue = document.getElementById('lowBandValue');
+        const midBandValue = document.getElementById('midBandValue');
+        const highBandValue = document.getElementById('highBandValue');
+        
+        // 控制滑块元素
+        const fftSlider = document.getElementById('fftSlider');
+        const fftValue = document.getElementById('fftValue');
+        const smoothingSlider = document.getElementById('smoothingSlider');
+        const smoothingValue = document.getElementById('smoothingValue');
+        const sensitivitySlider = document.getElementById('sensitivitySlider');
+        const sensitivityValue = document.getElementById('sensitivityValue');
+        
+        // 可视化类型按钮
+        const visBtns = document.querySelectorAll('.vis-btn');
+        
+        // ==================== 状态变量 ====================
+        let audioContext = null;
+        let analyserNode = null;
+        let sourceNode = null;
+        let gainNode = null;
+        let frequencyData = null;
+        let timeDomainData = null;
+        let animationId = null;
+        let isAnalyzing = false;
+        let isPlaying = false;
+        let currentAudioFile = null;
+        let visualizationType = 'bars';
+        // 新增：标记是否已创建过sourceNode（避免重复创建）
+        let isSourceNodeCreated = false;
+        
+        // ==================== 初始化函数 ====================
+        function init() {
+            console.log('音频频谱分析器初始化...');
+            
+            // 设置画布尺寸
+            updateCanvasSizes();
+            
+            // 设置事件监听器
+            setupEventListeners();
+            
+            // 初始化Web Audio API
+            initAudioContext();
+            
+            // 更新状态
+            updateStatus('ready', '等待音频文件上传');
+            
+            console.log('初始化完成');
+        }
+        
+        // ==================== 事件监听器设置 ====================
+        function setupEventListeners() {
+            // 文件上传区域点击事件
+            uploadArea.addEventListener('click', () => {
+                audioFileInput.click();
+            });
+            
+            // 拖拽上传支持
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('drag-over');
+            });
+            
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('drag-over');
+            });
+            
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('drag-over');
+                
+                if (e.dataTransfer.files.length) {
+                    handleAudioFile(e.dataTransfer.files[0]);
+                }
+            });
+            
+            // 文件选择事件
+            audioFileInput.addEventListener('change', (e) => {
+                if (e.target.files.length) {
+                    handleAudioFile(e.target.files[0]);
+                }
+            });
+            
+            // 音频播放器事件
+            audioPlayer.addEventListener('loadedmetadata', handleAudioLoaded);
+            audioPlayer.addEventListener('timeupdate', updateTimeDisplay);
+            audioPlayer.addEventListener('ended', handleAudioEnded);
+            audioPlayer.addEventListener('error', handleAudioError);
+            
+            // 控制按钮事件
+            playBtn.addEventListener('click', playAudio);
+            pauseBtn.addEventListener('click', pauseAudio);
+            analyzeBtn.addEventListener('click', toggleAnalysis);
+            
+            // 进度条点击事件
+            progressContainer.addEventListener('click', (e) => {
+                if (!audioPlayer.src || !audioPlayer.duration) return;
+                
+                const rect = progressContainer.getBoundingClientRect();
+                const clickPosition = (e.clientX - rect.left) / rect.width;
+                const newTime = clickPosition * audioPlayer.duration;
+                
+                audioPlayer.currentTime = newTime;
+                updateProgressBar();
+            });
+            
+            // 控制滑块事件
+            fftSlider.addEventListener('input', updateFFTSize);
+            smoothingSlider.addEventListener('input', updateSmoothing);
+            sensitivitySlider.addEventListener('input', updateSensitivity);
+            
+            // 可视化类型按钮事件
+            visBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    visBtns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    visualizationType = btn.dataset.type;
+                });
+            });
+            
+            // 窗口大小调整事件
+            window.addEventListener('resize', updateCanvasSizes);
+        }
+        
+        // ==================== 音频文件处理 ====================
+        function handleAudioFile(file) {
+            console.log(`处理音频文件: ${file.name}`);
+            
+            // 验证文件类型
+            if (!file.type.startsWith('audio/')) {
+                showError('请选择音频文件！支持MP3、WAV、OGG等格式。');
+                return;
+            }
+            
+            currentAudioFile = file;
+            
+            // 创建对象URL
+            const audioURL = URL.createObjectURL(file);
+            audioPlayer.src = audioURL;
+            
+            // 显示音频信息
+            displayAudioInfo(file);
+            
+            // 显示音频播放器和控制按钮
+            audioPlayer.style.display = 'block';
+            playBtn.disabled = false;
+            analyzeBtn.disabled = false;
+            progressContainer.style.display = 'block';
+            
+            // 更新状态
+            updateStatus('file_loaded', `已加载: ${file.name}`);
+            
+            // 重置分析状态
+            isAnalyzing = false;
+            isPlaying = false; // 新增：重置播放状态
+            isSourceNodeCreated = false; // 新增：重置sourceNode标记
+            analyzeBtn.innerHTML = '<i class="fas fa-chart-line"></i> 开始分析';
+            analysisStatusValue.textContent = '待机';
+            analysisStatusSub.textContent = '点击"开始分析"按钮';
+            
+            // 停止任何正在进行的分析
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            
+            // 清除频谱画布
+            clearCanvas(spectrumCanvas);
+            clearCanvas(waveformCanvas);
+            
+            console.log(`音频文件已加载: ${file.name}`);
+        }
+        
+        function handleAudioLoaded() {
+            console.log(`音频元数据加载完成: 时长=${audioPlayer.duration.toFixed(2)}秒`);
+            
+            // 更新时长显示
+            const duration = audioPlayer.duration;
+            const minutes = Math.floor(duration / 60);
+            const seconds = Math.floor(duration % 60);
+            audioDuration.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            
+            // 更新状态
+            updateStatus('audio_ready', `时长: ${minutes}:${seconds.toString().padStart(2, '0')}`);
+            
+            // 绘制初始波形
+            drawInitialWaveform();
+        }
+        
+        function handleAudioEnded() {
+            console.log('音频播放结束');
+            isPlaying = false;
+            playBtn.disabled = false;
+            pauseBtn.disabled = true;
+            updateStatus('playback_ended', '播放完成');
+            
+            // 修复：播放结束后保留分析器节点，仅停止动画
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            
+            // 修复：播放结束后重置进度条
+            progressBar.style.width = '0%';
+            audioPlayer.currentTime = 0;
+            updateTimeDisplay();
+        }
+        
+        function handleAudioError(e) {
+            console.error('音频播放错误:', e);
+            showError('音频播放错误。请确保文件格式受支持且未损坏。');
+        }
+        
+        // ==================== 音频控制函数 ====================
+        function playAudio() {
+            if (!audioPlayer.src) return;
+            
+            // 确保音频上下文处于运行状态
+            if (audioContext && audioContext.state === 'suspended') {
+                audioContext.resume().then(() => {
+                    console.log('AudioContext已恢复');
+                });
+            }
+            
+            audioPlayer.play()
+                .then(() => {
+                    isPlaying = true;
+                    playBtn.disabled = true;
+                    pauseBtn.disabled = false;
+                    updateStatus('playing', '播放中...');
+                    
+                    // 修复：如果分析已开启但动画未运行，重新启动频谱绘制
+                    if (isAnalyzing && !animationId) {
+                        drawSpectrum();
+                    }
+                    // 修复：如果分析已开启但sourceNode未连接，重新连接
+                    if (isAnalyzing && sourceNode && audioContext) {
+                        sourceNode.connect(gainNode);
+                        gainNode.connect(analyserNode);
+                        analyserNode.connect(audioContext.destination);
+                    }
+                })
+                .catch(error => {
+                    console.error('播放失败:', error);
+                    showError('播放失败: ' + error.message);
+                });
+        }
+        
+        function pauseAudio() {
+            if (!audioPlayer.src) return;
+            
+            audioPlayer.pause();
+            isPlaying = false;
+            playBtn.disabled = false;
+            pauseBtn.disabled = true;
+            updateStatus('paused', '已暂停');
+            
+            // 修复：暂停时不停止动画（仅停止音频，频谱分析可继续）
+            // 如需暂停频谱，可注释下方代码
+            if (isAnalyzing && !animationId) {
+                drawSpectrum();
+            }
+        }
+        
+        // ==================== 分析控制函数 ====================
+        function toggleAnalysis() {
+            if (!audioPlayer.src) {
+                showError('请先上传音频文件');
+                return;
+            }
+            
+            if (!isAnalyzing) {
+                startAnalysis();
+            } else {
+                stopAnalysis();
+            }
+        }
+        
+        function startAnalysis() {
+            console.log('开始频谱分析...');
+            
+            // 初始化音频分析节点
+            initAnalyserNode();
+            
+            // 连接音频源到分析器
+            if (audioContext && audioPlayer.src) {
+                try {
+                    // 修复：复用已创建的sourceNode，避免重复创建
+                    if (!isSourceNodeCreated || !sourceNode) {
+                        sourceNode = audioContext.createMediaElementSource(audioPlayer);
+                        isSourceNodeCreated = true;
+                    }
+                    
+                    // 创建增益节点（用于音量控制）
+                    if (!gainNode) {
+                        gainNode = audioContext.createGain();
+                        gainNode.gain.value = 1.0;
+                    }
+                    
+                    // 确保节点连接（即使之前断开）
+                    sourceNode.connect(gainNode);
+                    gainNode.connect(analyserNode);
+                    analyserNode.connect(audioContext.destination);
+                    
+                    console.log('音频节点连接成功');
+                } catch (error) {
+                    console.error('音频节点连接失败:', error);
+                    showError('音频分析初始化失败: ' + error.message);
+                    return;
+                }
+            }
+            
+            isAnalyzing = true;
+            analyzeBtn.innerHTML = '<i class="fas fa-stop"></i> 停止分析';
+            analyzeBtn.classList.add('btn-stop');
+            analyzeBtn.classList.remove('btn-analyze');
+            
+            // 更新状态
+            updateStatus('analyzing', '实时分析中...');
+            analysisStatusValue.textContent = '分析中';
+            analysisStatusSub.textContent = '实时分析音频频谱';
+            
+            // 开始绘制频谱（强制重置动画帧）
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            drawSpectrum();
+            
+            // 修复：如果音频已暂停，自动播放
+            if (!isPlaying) {
+                playAudio();
+            }
+            
+            console.log('频谱分析已启动');
+        }
+        
+        function stopAnalysis() {
+            console.log('停止频谱分析...');
+            
+            isAnalyzing = false;
+            analyzeBtn.innerHTML = '<i class="fas fa-chart-line"></i> 开始分析';
+            analyzeBtn.classList.remove('btn-stop');
+            analyzeBtn.classList.add('btn-analyze');
+            
+            // 更新状态
+            updateStatus('analysis_stopped', '分析已停止');
+            analysisStatusValue.textContent = '已停止';
+            analysisStatusSub.textContent = '分析已停止';
+            
+            // 停止动画
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            
+            // 修复：停止分析时仅断开分析器，保留sourceNode引用
+            if (analyserNode) {
+                analyserNode.disconnect(audioContext.destination);
+            }
+            
+            // 清除频谱画布
+            clearCanvas(spectrumCanvas);
+            
+            console.log('频谱分析已停止');
+        }
+        
+        // ==================== 音频分析初始化 ====================
+        function initAudioContext() {
+            if (!audioContext) {
+                try {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    console.log(`AudioContext创建成功: 状态=${audioContext.state}, 采样率=${audioContext.sampleRate}Hz`);
+                } catch (error) {
+                    console.error('AudioContext创建失败:', error);
+                    showError('浏览器不支持Web Audio API或AudioContext创建失败');
+                    return;
+                }
+            }
+        }
+        
+        function initAnalyserNode() {
+            if (!audioContext) {
+                initAudioContext();
+            }
+            
+            if (!analyserNode) {
+                analyserNode = audioContext.createAnalyser();
+            }
+            
+            // 应用当前设置
+            updateAnalyserSettings();
+            
+            // 初始化数据数组
+            const fftSize = parseInt(fftSlider.value);
+            analyserNode.fftSize = fftSize;
+            frequencyData = new Uint8Array(analyserNode.frequencyBinCount);
+            timeDomainData = new Uint8Array(analyserNode.frequencyBinCount);
+            
+            console.log(`分析器初始化: fftSize=${fftSize}, 频率槽数量=${analyserNode.frequencyBinCount}`);
+        }
+        
+        function updateAnalyserSettings() {
+            if (!analyserNode) return;
+            
+            analyserNode.smoothingTimeConstant = parseFloat(smoothingSlider.value);
+            
+            console.log(`分析器设置更新: 平滑系数=${analyserNode.smoothingTimeConstant}`);
+        }
+        
+        // ==================== 控制滑块更新函数 ====================
+        function updateFFTSize() {
+            const value = parseInt(fftSlider.value);
+            fftValue.textContent = value;
+            
+            if (analyserNode) {
+                analyserNode.fftSize = value;
+                frequencyData = new Uint8Array(analyserNode.frequencyBinCount);
+                timeDomainData = new Uint8Array(analyserNode.frequencyBinCount);
+                
+                // 更新频谱信息显示
+                const sampleRate = audioContext ? audioContext.sampleRate : 44100;
+                const freqResolution = sampleRate / value;
+                const maxFreq = sampleRate / 2;
+                spectrumInfo.textContent = `频率范围: 0-${Math.round(maxFreq)} Hz | 分辨率: ${freqResolution.toFixed(1)} Hz`;
+                
+                console.log(`FFT大小更新: ${value}, 频率分辨率: ${freqResolution.toFixed(1)} Hz`);
+            }
+        }
+        
+        function updateSmoothing() {
+            const value = parseFloat(smoothingSlider.value);
+            smoothingValue.textContent = value.toFixed(2);
+            
+            if (analyserNode) {
+                analyserNode.smoothingTimeConstant = value;
+                console.log(`平滑系数更新: ${value}`);
+            }
+        }
+        
+        function updateSensitivity() {
+            const value = parseInt(sensitivitySlider.value);
+            sensitivityValue.textContent = `${value}%`;
+            console.log(`灵敏度更新: ${value}%`);
+        }
+        
+        // ==================== 可视化函数 ====================
+        function drawSpectrum() {
+            if (!isAnalyzing || !analyserNode || !frequencyData) {
+                return;
+            }
+            
+            // 获取频谱数据
+            analyserNode.getByteFrequencyData(frequencyData);
+            
+            // 获取时域数据（用于波形显示）
+            analyserNode.getByteTimeDomainData(timeDomainData);
+            
+            // 根据选择的类型绘制频谱
+            switch (visualizationType) {
+                case 'bars':
+                    drawBarSpectrum();
+                    break;
+                case 'wave':
+                    drawWaveSpectrum();
+                    break;
+                case 'circle':
+                    drawCircleSpectrum();
+                    break;
+                case 'gradient':
+                    drawGradientSpectrum();
+                    break;
+            }
+            
+            // 绘制波形
+            drawWaveform();
+            
+            // 更新频带信息
+            updateFrequencyBands();
+            
+            // 更新主频率和峰值音量
+            updateAudioMetrics();
+            
+            // 更新进度条
+            updateProgressBar();
+            
+            // 继续动画
+            animationId = requestAnimationFrame(drawSpectrum);
+        }
+        
+        function drawBarSpectrum() {
+            const ctx = spectrumCanvas.getContext('2d');
+            const width = spectrumCanvas.width;
+            const height = spectrumCanvas.height;
+            const barCount = frequencyData.length;
+            const barWidth = width / barCount;
+            const sensitivity = parseInt(sensitivitySlider.value) / 100;
+            
+            // 清除画布
+            ctx.fillStyle = 'rgba(15, 12, 41, 0.1)';
+            ctx.fillRect(0, 0, width, height);
+            
+            // 绘制频谱条
+            for (let i = 0; i < barCount; i++) {
+                const value = frequencyData[i];
+                const scaledValue = value * sensitivity;
+                const barHeight = (scaledValue / 255) * height;
+                
+                // 计算颜色（根据频率和强度）
+                const hue = (i / barCount) * 300;
+                const saturation = 80 + (scaledValue / 255) * 20;
+                const lightness = 40 + (scaledValue / 255) * 40;
+                
+                ctx.fillStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+                
+                // 绘制条形
+                const x = i * barWidth;
+                const y = height - barHeight;
+                
+                ctx.fillRect(x, y, barWidth - 1, barHeight);
+            }
+        }
+        
+        function drawWaveSpectrum() {
+            const ctx = spectrumCanvas.getContext('2d');
+            const width = spectrumCanvas.width;
+            const height = spectrumCanvas.height;
+            const dataLength = frequencyData.length;
+            const sliceWidth = width / dataLength;
+            const sensitivity = parseInt(sensitivitySlider.value) / 100;
+            
+            // 清除画布
+            ctx.fillStyle = 'rgba(15, 12, 41, 0.1)';
+            ctx.fillRect(0, 0, width, height);
+            
+            ctx.beginPath();
+            ctx.lineWidth = 2;
+            
+            for (let i = 0; i < dataLength; i++) {
+                const value = frequencyData[i];
+                const scaledValue = value * sensitivity;
+                const v = scaledValue / 255;
+                const y = height - (v * height);
+                const x = i * sliceWidth;
+                
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            
+            // 创建渐变线条
+            const gradient = ctx.createLinearGradient(0, 0, width, 0);
+            gradient.addColorStop(0, '#ff0080');
+            gradient.addColorStop(0.5, '#00ffcc');
+            gradient.addColorStop(1, '#8000ff');
+            
+            ctx.strokeStyle = gradient;
+            ctx.stroke();
+        }
+        
+        function drawCircleSpectrum() {
+            const ctx = spectrumCanvas.getContext('2d');
+            const width = spectrumCanvas.width;
+            const height = spectrumCanvas.height;
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const radius = Math.min(width, height) * 0.4;
+            const dataLength = frequencyData.length;
+            const sensitivity = parseInt(sensitivitySlider.value) / 100;
+            
+            // 清除画布
+            ctx.fillStyle = 'rgba(15, 12, 41, 0.1)';
+            ctx.fillRect(0, 0, width, height);
+            
+            // 绘制圆形频谱
+            ctx.beginPath();
+            
+            for (let i = 0; i < dataLength; i++) {
+                const value = frequencyData[i];
+                const scaledValue = value * sensitivity;
+                const angle = (i / dataLength) * Math.PI * 2;
+                const barLength = (scaledValue / 255) * radius * 0.7;
+                
+                const x1 = centerX + Math.cos(angle) * radius;
+                const y1 = centerY + Math.sin(angle) * radius;
+                const x2 = centerX + Math.cos(angle) * (radius + barLength);
+                const y2 = centerY + Math.sin(angle) * (radius + barLength);
+                
+                // 根据频率选择颜色
+                const hue = (i / dataLength) * 360;
+                ctx.strokeStyle = `hsl(${hue}, 100%, 60%)`;
+                ctx.lineWidth = 2;
+                
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+            }
+        }
+        
+        function drawGradientSpectrum() {
+            const ctx = spectrumCanvas.getContext('2d');
+            const width = spectrumCanvas.width;
+            const height = spectrumCanvas.height;
+            const dataLength = frequencyData.length;
+            const sliceWidth = width / dataLength;
+            const sensitivity = parseInt(sensitivitySlider.value) / 100;
+            
+            // 清除画布
+            ctx.fillStyle = 'rgba(15, 12, 41, 0.1)';
+            ctx.fillRect(0, 0, width, height);
+            
+            // 创建渐变填充的频谱
+            for (let i = 0; i < dataLength; i++) {
+                const value = frequencyData[i];
+                const scaledValue = value * sensitivity;
+                const barHeight = (scaledValue / 255) * height;
+                
+                // 创建垂直渐变
+                const gradient = ctx.createLinearGradient(0, height - barHeight, 0, height);
+                const hue = (i / dataLength) * 300;
+                
+                gradient.addColorStop(0, `hsla(${hue}, 100%, 60%, 0.9)`);
+                gradient.addColorStop(1, `hsla(${hue}, 100%, 30%, 0.3)`);
+                
+                ctx.fillStyle = gradient;
+                
+                // 绘制条形
+                const x = i * sliceWidth;
+                const y = height - barHeight;
+                
+                ctx.fillRect(x, y, sliceWidth, barHeight);
+            }
+        }
+        
+        function drawWaveform() {
+            const ctx = waveformCanvas.getContext('2d');
+            const width = waveformCanvas.width;
+            const height = waveformCanvas.height;
+            const dataLength = timeDomainData.length;
+            const sliceWidth = width / dataLength;
+            
+            // 清除画布
+            ctx.fillStyle = 'rgba(26, 26, 46, 0.8)';
+            ctx.fillRect(0, 0, width, height);
+            
+            ctx.beginPath();
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = '#00ffcc';
+            
+            // 绘制中心线
+            ctx.moveTo(0, height / 2);
+            ctx.lineTo(width, height / 2);
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#3498db';
+            
+            // 绘制波形
+            for (let i = 0; i < dataLength; i++) {
+                const value = timeDomainData[i];
+                const v = value / 128.0;
+                const y = (v * height) / 2;
+                const x = i * sliceWidth;
+                
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            
+            ctx.stroke();
+        }
+        
+        function drawInitialWaveform() {
+            // 这是一个简化的初始波形绘制，实际应用中可能需要解码音频数据
+            const ctx = waveformCanvas.getContext('2d');
+            const width = waveformCanvas.width;
+            const height = waveformCanvas.height;
+            
+            // 清除画布
+            ctx.fillStyle = 'rgba(26, 26, 46, 0.8)';
+            ctx.fillRect(0, 0, width, height);
+            
+            // 绘制示例波形
+            ctx.beginPath();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#3498db';
+            
+            const points = 200;
+            for (let i = 0; i <= points; i++) {
+                const x = (i / points) * width;
+                const t = (i / points) * Math.PI * 8;
+                const y = height / 2 + Math.sin(t) * (height / 4) * Math.sin(t / 8);
+                
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            
+            ctx.stroke();
+            
+            // 绘制中心线
+            ctx.beginPath();
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.moveTo(0, height / 2);
+            ctx.lineTo(width, height / 2);
+            ctx.stroke();
+        }
+        
+        function clearCanvas(canvas) {
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        
+        // ==================== 信息更新函数 ====================
+        function displayAudioInfo(file) {
+            audioInfo.style.display = 'block';
+            
+            fileName.textContent = file.name;
+            fileSize.textContent = formatFileSize(file.size);
+            audioFormat.textContent = file.type || '未知格式';
+            
+            // 重置时长显示（等待loadedmetadata事件更新）
+            audioDuration.textContent = '加载中...';
+        }
+        
+        function updateTimeDisplay() {
+            if (!audioPlayer.src) return;
+            
+            const currentTime = audioPlayer.currentTime;
+            const duration = audioPlayer.duration;
+            
+            if (isNaN(duration)) return;
+            
+            const currentMinutes = Math.floor(currentTime / 60);
+            const currentSeconds = Math.floor(currentTime % 60);
+            const durationMinutes = Math.floor(duration / 60);
+            const durationSeconds = Math.floor(duration % 60);
+            
+            timeDisplay.textContent = 
+                `${currentMinutes.toString().padStart(2, '0')}:${currentSeconds.toString().padStart(2, '0')} / ${durationMinutes.toString().padStart(2, '0')}:${durationSeconds.toString().padStart(2, '0')}`;
+        }
+        
+        function updateProgressBar() {
+            if (!audioPlayer.src || !audioPlayer.duration) return;
+            
+            const progress = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+            progressBar.style.width = `${progress}%`;
+        }
+        
+        function updateFrequencyBands() {
+            if (!frequencyData || !analyserNode) return;
+            
+            const sampleRate = audioContext ? audioContext.sampleRate : 44100;
+            const binCount = analyserNode.frequencyBinCount;
+            const freqPerBin = sampleRate / 2 / binCount;
+            
+            // 定义频带范围
+            const lowBandEnd = 250; // Hz
+            const midBandEnd = 4000; // Hz
+            
+            // 计算频带边界对应的索引
+            const lowEndIndex = Math.floor(lowBandEnd / freqPerBin);
+            const midEndIndex = Math.floor(midBandEnd / freqPerBin);
+            
+            // 计算各频带平均值
+            let lowSum = 0, midSum = 0, highSum = 0;
+            let lowCount = 0, midCount = 0, highCount = 0;
+            
+            for (let i = 0; i < binCount; i++) {
+                if (i < lowEndIndex) {
+                    lowSum += frequencyData[i];
+                    lowCount++;
+                } else if (i < midEndIndex) {
+                    midSum += frequencyData[i];
+                    midCount++;
+                } else {
+                    highSum += frequencyData[i];
+                    highCount++;
+                }
+            }
+            
+            // 更新显示
+            lowBandValue.textContent = lowCount > 0 ? Math.round(lowSum / lowCount) : 0;
+            midBandValue.textContent = midCount > 0 ? Math.round(midSum / midCount) : 0;
+            highBandValue.textContent = highCount > 0 ? Math.round(highSum / highCount) : 0;
+        }
+        
+        function updateAudioMetrics() {
+            if (!frequencyData || frequencyData.length === 0) return;
+            
+            // 计算主频率
+            let maxIndex = 0;
+            let maxValue = 0;
+            
+            for (let i = 0; i < frequencyData.length; i++) {
+                if (frequencyData[i] > maxValue) {
+                    maxValue = frequencyData[i];
+                    maxIndex = i;
+                }
+            }
+            
+            // 计算频率值
+            const sampleRate = audioContext ? audioContext.sampleRate : 44100;
+            const freqPerBin = sampleRate / 2 / frequencyData.length;
+            const dominantFreq = maxIndex * freqPerBin;
+            
+            // 计算峰值音量（dB）
+            const maxAmplitude = maxValue / 255.0;
+            const peakDB = maxAmplitude > 0 ? 20 * Math.log10(maxAmplitude) : -100;
+            
+            // 更新显示
+            dominantFreqValue.textContent = `${dominantFreq.toFixed(1)} Hz`;
+            dominantFreqSub.textContent = `频带: ${getFrequencyBand(dominantFreq)}`;
+            
+            peakVolumeValue.textContent = `${peakDB.toFixed(1)} dB`;
+            peakVolumeSub.textContent = peakDB > -10 ? '音量较高' : peakDB > -30 ? '音量适中' : '音量较低';
+            
+            // 更新频谱信息
+            const maxFreq = sampleRate / 2;
+            const freqResolution = sampleRate / analyserNode.fftSize;
+            spectrumInfo.textContent = `频率范围: 0-${Math.round(maxFreq)} Hz | 分辨率: ${freqResolution.toFixed(1)} Hz`;
+        }
+        
+        function getFrequencyBand(freq) {
+            if (freq < 250) return '低频';
+            if (freq < 4000) return '中频';
+            return '高频';
+        }
+        
+        function updateStatus(status, message) {
+            console.log(`状态更新: ${status} - ${message}`);
+            
+            switch (status) {
+                case 'ready':
+                    audioStatusValue.textContent = '就绪';
+                    audioStatusSub.textContent = message;
+                    break;
+                case 'file_loaded':
+                    audioStatusValue.textContent = '文件已加载';
+                    audioStatusSub.textContent = message;
+                    break;
+                case 'audio_ready':
+                    audioStatusValue.textContent = '音频就绪';
+                    audioStatusSub.textContent = message;
+                    break;
+                case 'playing':
+                    audioStatusValue.textContent = '播放中';
+                    audioStatusSub.textContent = message;
+                    break;
+                case 'paused':
+                    audioStatusValue.textContent = '已暂停';
+                    audioStatusSub.textContent = message;
+                    break;
+                case 'playback_ended':
+                    audioStatusValue.textContent = '播放完成';
+                    audioStatusSub.textContent = message;
+                    break;
+                case 'analyzing':
+                    audioStatusValue.textContent = '分析中';
+                    audioStatusSub.textContent = message;
+                    break;
+                case 'analysis_stopped':
+                    audioStatusValue.textContent = '分析停止';
+                    audioStatusSub.textContent = message;
+                    break;
+            }
+        }
+        
+        // ==================== 工具函数 ====================
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        function updateCanvasSizes() {
+            spectrumCanvas.width = spectrumCanvas.clientWidth;
+            spectrumCanvas.height = spectrumCanvas.clientHeight;
+            
+            waveformCanvas.width = waveformCanvas.clientWidth;
+            waveformCanvas.height = waveformCanvas.clientHeight;
+            
+            console.log(`画布尺寸更新: 频谱=${spectrumCanvas.width}x${spectrumCanvas.height}, 波形=${waveformCanvas.width}x${waveformCanvas.height}`);
+        }
+        
+        function showError(message) {
+            errorText.textContent = message;
+            errorMessage.style.display = 'block';
+            
+            // 5秒后自动隐藏错误信息
+            setTimeout(() => {
+                errorMessage.style.display = 'none';
+            }, 5000);
+            
+            console.error(`错误: ${message}`);
+        }
+        
+        // ==================== 页面初始化 ====================
+        // 页面加载完成后初始化
+        window.addEventListener('load', init);
+        
+        // 页面关闭前清理资源
+        window.addEventListener('beforeunload', () => {
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
+            
+            if (audioContext) {
+                audioContext.close();
+                console.log('AudioContext已关闭');
+            }
+            
+            // 清理对象URL
+            if (audioPlayer.src && audioPlayer.src.startsWith('blob:')) {
+                URL.revokeObjectURL(audioPlayer.src);
+            }
+        });
+    </script>
+</body>
+</html>

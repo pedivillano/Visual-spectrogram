@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>步进播放音乐与频谱分析</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+        body {
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .controls {
+            margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        label {
+            font-weight: 600;
+            color: #333;
+        }
+        input, select, button {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .info {
+            margin: 10px 0;
+            color: #666;
+            font-size: 14px;
+        }
+        #canvas-container {
+            width: 100%;
+            height: 300px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        #spectrum-canvas {
+            width: 100%;
+            height: 100%;
+        }
+        .status {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>步进播放音乐与FFT频谱分析</h2>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="audio-file">选择音频文件</label>
+                <input type="file" id="audio-file" accept="audio/*">
+            </div>
+            <div class="control-group">
+                <label for="fft-size">FFT帧数（片段长度对应此值）</label>
+                <select id="fft-size">
+                    <option value="256">256</option>
+                    <option value="512">512</option>
+                    <option value="1024" selected>1024</option>
+                    <option value="2048">2048</option>
+                    <option value="4096">4096</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>片段时长/FPS信息</label>
+                <div id="fft-info" class="info">请选择FFT帧数并加载音频</div>
+            </div>
+            <div class="control-group">
+                <label for="auto-play">自动播放</label>
+                <input type="checkbox" id="auto-play">
+            </div>
+            <div class="control-group">
+                <label for="auto-interval">自动播放间隔(秒)</label>
+                <input type="number" id="auto-interval" value="1" min="0.1" step="0.1">
+            </div>
+            <div class="control-group">
+                <label>&nbsp;</label>
+                <button id="play-btn">播放当前片段</button>
+            </div>
+            <div class="control-group">
+                <label>&nbsp;</label>
+                <button id="pause-btn" disabled>暂停</button>
+            </div>
+        </div>
+
+        <div id="canvas-container">
+            <canvas id="spectrum-canvas"></canvas>
+        </div>
+
+        <div class="status">
+            当前进度：<span id="current-position">0</span> / <span id="total-segments">0</span> 个片段 | 
+            播放状态：<span id="play-status">未加载</span>
+        </div>
+    </div>
+
+    <script>
+        // 核心变量
+        let audioContext;       // 音频上下文
+        let audioBuffer;        // 音频缓冲区
+        let analyser;           // 频谱分析器
+        let source;             // 音频源
+        let fftSize = 1024;     // 默认FFT帧数
+        let sampleRate;         // 音频采样率
+        let segmentDuration;    // 每个片段的时长(秒)
+        let fps;                // 每秒帧数
+        let currentSegment = 0; // 当前播放的片段索引
+        let totalSegments = 0;  // 总片段数
+        let isPlaying = false;  // 是否正在播放
+        let autoPlay = false;   // 是否自动播放
+        let autoPlayInterval = 1; // 自动播放间隔(秒)
+        let autoPlayTimer = null; // 自动播放定时器
+        let lastSpectrumData = null; // 最后一帧频谱数据（暂停时保留）
+
+        // DOM元素
+        const audioFileInput = document.getElementById('audio-file');
+        const fftSizeSelect = document.getElementById('fft-size');
+        const fftInfoDiv = document.getElementById('fft-info');
+        const autoPlayCheckbox = document.getElementById('auto-play');
+        const autoIntervalInput = document.getElementById('auto-interval');
+        const playBtn = document.getElementById('play-btn');
+        const pauseBtn = document.getElementById('pause-btn');
+        const canvas = document.getElementById('spectrum-canvas');
+        const ctx = canvas.getContext('2d');
+        const currentPositionSpan = document.getElementById('current-position');
+        const totalSegmentsSpan = document.getElementById('total-segments');
+        const playStatusSpan = document.getElementById('play-status');
+
+        // 初始化FFT信息
+        function updateFFTInfo() {
+            if (sampleRate) {
+                // 计算片段时长：FFT帧数 / 采样率
+                segmentDuration = fftSize / sampleRate;
+                // 计算FPS：1 / 片段时长
+                fps = 1 / segmentDuration;
+                fftInfoDiv.textContent = `片段时长：${segmentDuration.toFixed(6)} 秒 | 每秒帧数(FPS)：${fps.toFixed(2)}`;
+            } else {
+                fftInfoDiv.textContent = `FFT ${fftSize}帧 | 请先加载音频文件获取采样率`;
+            }
+        }
+
+        // 初始化画布大小
+        function resizeCanvas() {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+        }
+
+        // 加载音频文件
+        audioFileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            try {
+                // 初始化音频上下文（首次需用户交互，这里通过文件选择触发）
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    analyser = audioContext.createAnalyser();
+                    analyser.fftSize = fftSize;
+                }
+
+                // 读取音频文件并解码
+                const arrayBuffer = await file.arrayBuffer();
+                audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                sampleRate = audioBuffer.sampleRate;
+
+                // 更新FFT信息
+                updateFFTInfo();
+
+                // 计算总片段数
+                totalSegments = Math.floor(audioBuffer.duration / segmentDuration);
+                totalSegmentsSpan.textContent = totalSegments;
+                currentPositionSpan.textContent = currentSegment;
+
+                // 更新状态
+                playStatusSpan.textContent = '已加载';
+                playBtn.disabled = false;
+
+                console.log(`音频加载完成：时长 ${audioBuffer.duration.toFixed(2)} 秒，采样率 ${sampleRate} Hz`);
+            } catch (error) {
+                console.error('音频加载失败：', error);
+                alert('音频加载失败，请选择有效的音频文件！');
+            }
+        });
+
+        // 切换FFT帧数
+        fftSizeSelect.addEventListener('change', () => {
+            fftSize = parseInt(fftSizeSelect.value);
+            if (analyser) {
+                analyser.fftSize = fftSize;
+            }
+            updateFFTInfo();
+            // 重新计算总片段数（如果已加载音频）
+            if (audioBuffer) {
+                totalSegments = Math.floor(audioBuffer.duration / segmentDuration);
+                totalSegmentsSpan.textContent = totalSegments;
+            }
+        });
+
+        // 自动播放开关
+        autoPlayCheckbox.addEventListener('change', () => {
+            autoPlay = autoPlayCheckbox.checked;
+        });
+
+        // 自动播放间隔修改
+        autoIntervalInput.addEventListener('input', () => {
+            autoPlayInterval = parseFloat(autoIntervalInput.value);
+        });
+
+        // 绘制频谱图
+        function drawSpectrum() {
+            // 日志1：标记函数开始执行，便于追踪调用频率
+            console.log('[频谱绘制] 开始执行 drawSpectrum 函数');
+
+            if (!analyser) {
+                // 日志2：analyser 未初始化时的提示
+                console.warn('[频谱绘制] analyser 未初始化，直接返回');
+                return;
+            }
+
+            const width = canvas.width;
+            const height = canvas.height;
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+
+            // 日志3：输出画布尺寸和频谱数据长度，验证基础参数
+            console.log('[频谱绘制] 基础参数', {
+                canvasWidth: width,
+                canvasHeight: height,
+                frequencyBinCount: bufferLength,
+                dataArrayLength: dataArray.length
+            });
+
+            // 如果正在播放，获取实时频谱数据；否则使用最后一帧数据
+            if (isPlaying) {
+                analyser.getByteFrequencyData(dataArray);
+                lastSpectrumData = [...dataArray]; // 保存最后一帧数据
+                // 日志4：播放状态下，输出实时数据的关键信息（前10个值+最大值，避免日志刷屏）
+                const maxValue = Math.max(...dataArray);
+                console.log('[频谱绘制] 播放中 - 获取实时频谱数据', {
+                    maxFrequencyValue: maxValue,
+                    first10Values: dataArray.slice(0, 10), // 只看前10个值，减少日志量
+                    dataArrayLength: dataArray.length
+                });
+            } else if (lastSpectrumData) {
+                dataArray.set(lastSpectrumData); // 使用保存的最后一帧数据
+                // 日志5：暂停状态下，输出复用的最后一帧数据信息
+                console.log('[频谱绘制] 已暂停 - 使用最后一帧频谱数据', {
+                    lastDataMax: Math.max(...lastSpectrumData),
+                    lastDataLength: lastSpectrumData.length
+                });
+            } else {
+                // 无数据时清空画布
+                ctx.clearRect(0, 0, width, height);
+                // 日志6：无任何频谱数据时的提示
+                console.log('[频谱绘制] 无频谱数据，清空画布并返回');
+                return;
+            }
+
+            // 清空画布
+            ctx.clearRect(0, 0, width, height);
+
+            // 绘制频谱柱
+            const barWidth = width / bufferLength * 1.5;
+            let x = 0;
+            ctx.fillStyle = '#007bff';
+
+            // 日志7：输出绘制频谱柱的基础计算参数
+            console.log('[频谱绘制] 频谱柱绘制参数', {
+                barWidth: barWidth,
+                startX: x,
+                fillColor: ctx.fillStyle
+            });
+
+            // 可选：如果需要追踪每根柱子的绘制，可在循环内加日志（建议仅调试时开启，避免性能问题）
+            // 统计绘制的柱子总数和最大高度，便于验证绘制范围
+            let drawnBarCount = 0;
+            let maxBarHeight = 0;
+            for (let i = 0; i < bufferLength; i++) {
+                const barHeight = (dataArray[i] / 255) * height;
+                // 仅记录最大高度和计数，避免循环内日志刷屏
+                drawnBarCount++;
+                if (barHeight > maxBarHeight) maxBarHeight = barHeight;
+                
+                // 【可选】如需单根柱子调试，取消注释下面这行（会生成大量日志）
+                // console.log(`[频谱绘制] 第${i}根频谱柱`, { barHeight, x, barWidth });
+                
+                ctx.fillRect(x, height - barHeight, barWidth, barHeight);
+                x += barWidth + 1;
+            }
+
+            // 日志8：输出绘制完成的统计信息
+            console.log('[频谱绘制] 频谱柱绘制完成', {
+                totalBarsDrawn: drawnBarCount,
+                maxBarHeight: maxBarHeight,
+                finalXPosition: x // 验证绘制是否覆盖整个画布宽度
+            });
+
+            // 持续绘制（暂停时也会绘制最后一帧）
+            requestAnimationFrame(drawSpectrum);
+            
+            // 日志9：标记函数执行结束，确认 requestAnimationFrame 已调用
+            console.log('[频谱绘制] 本次绘制完成，已请求下一帧绘制\n');
+        }
+
+        // 播放指定片段
+        function playSegment(segmentIndex) {
+            if (!audioBuffer || segmentIndex >= totalSegments) return;
+
+            // 停止当前播放（如果有）
+            if (source) {
+                source.stop();
+                source.disconnect();
+            }
+
+            // 计算片段的起始和结束时间
+            const startTime = segmentIndex * segmentDuration;
+            const endTime = startTime + segmentDuration;
+
+            // 创建新的音频源
+            source = audioContext.createBufferSource();
+            source.buffer = audioBuffer;
+            // 连接到频谱分析器和输出
+            source.connect(analyser);
+            analyser.connect(audioContext.destination);
+
+            // 播放指定时间段的音频
+            source.start(0, startTime, segmentDuration);
+            isPlaying = true;
+            playStatusSpan.textContent = '播放中';
+            playBtn.disabled = true;
+            pauseBtn.disabled = false;
+            currentPositionSpan.textContent = segmentIndex + 1; // 显示当前片段（从1开始）
+
+            // 新增：手动触发一次绘制，确保频谱立刻显示
+            drawSpectrum(); // ✅ 强制更新频谱
+
+            // 播放完成后自动暂停
+            source.onended = () => {
+                stopPlayback();
+                currentSegment = segmentIndex + 1; // 切换到下一个片段
+
+                // 如果开启自动播放，且还有下一个片段，则等待后播放
+                if (autoPlay && currentSegment < totalSegments) {
+                    autoPlayTimer = setTimeout(() => {
+                        playSegment(currentSegment);
+                    }, autoPlayInterval * 1000);
+                }
+            };
+        }
+
+        // 停止播放
+        function stopPlayback() {
+            if (source) {
+                source.stop();
+                source.disconnect();
+                source = null;
+            }
+            isPlaying = false;
+            playStatusSpan.textContent = '已暂停';
+            playBtn.disabled = false;
+            pauseBtn.disabled = true;
+            // 清除自动播放定时器
+            if (autoPlayTimer) {
+                clearTimeout(autoPlayTimer);
+                autoPlayTimer = null;
+            }
+        }
+
+        // 播放按钮点击事件
+        playBtn.addEventListener('click', () => {
+            // 如果音频上下文暂停，先恢复
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+            playSegment(currentSegment);
+        });
+
+        // 暂停按钮点击事件
+        pauseBtn.addEventListener('click', () => {
+            stopPlayback();
+        });
+
+        // 窗口大小变化时重置画布
+        window.addEventListener('resize', resizeCanvas);
+
+        // 初始化
+        resizeCanvas();
+        updateFFTInfo();
+        drawSpectrum(); // 启动频谱绘制循环
+    </script>
+</body>
+</html>
