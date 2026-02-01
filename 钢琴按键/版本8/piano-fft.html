@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>钢琴按键频率表 + FFT参数对照（黑键位置修正版）</title>
+
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: "Microsoft YaHei", Arial, sans-serif;
+}
+
+body {
+    background-color: #f5f5f5;
+    color: #333;
+    overflow-x: hidden;
+}
+
+/* ===== FFT 表 ===== */
+.fft-table-container {
+    width: 100%;
+    padding: 20px;
+    background-color: #fff;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,.1);
+}
+
+.fft-table {
+    width: 100%;
+    max-width: 800px;
+    margin: auto;
+    border-collapse: collapse;
+    text-align: center;
+}
+
+.fft-table th, .fft-table td {
+    border: 1px solid #ddd;
+    padding: 10px;
+}
+
+.fft-table th {
+    background: #3498db;
+    color: #fff;
+}
+
+/* ===== 钢琴容器 ===== */
+.piano-container {
+    position: relative;
+    height: 520px;
+    padding: 0 20px;
+    overflow: hidden;
+}
+
+.piano-slider {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    display: flex;
+    align-items: flex-end;
+    cursor: grab;
+    transition: transform .08s ease-out;
+}
+
+/* ===== 白键 ===== */
+.white-key {
+    width: 80px;
+    height: 380px;
+    background: #fff;
+    border: 1px solid #ccc;
+    position: relative;
+    display: flex;
+    justify-content: center;
+}
+
+.white-label {
+    position: absolute;
+    bottom: -55px;
+    text-align: center;
+    font-size: 14px;
+}
+
+.white-label .freq {
+    font-size: 12px;
+    color: #666;
+}
+
+/* ===== 黑键（关键修正部分） ===== */
+.black-keys {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 240px;
+    z-index: 2;
+    pointer-events: none;
+}
+
+.black-key {
+    position: absolute;
+    width: 48px;
+    height: 100%;
+    background: #222;
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+    pointer-events: auto;
+}
+
+.black-key:hover {
+    background: #444;
+}
+
+.black-label {
+    position: absolute;
+    top: -24px;
+    width: 100%;
+    text-align: center;
+    font-size: 13px;
+    color: #2c3e50;
+}
+
+/* ===== 提示 ===== */
+.tip {
+    text-align: center;
+    color: #666;
+    font-size: 14px;
+    margin: 30px 0;
+}
+</style>
+</head>
+
+<body>
+
+<div class="fft-table-container">
+    <h2 style="text-align:center;margin-bottom:10px">
+        FFT 窗口长度与分析参数（fs = 44100 Hz）
+    </h2>
+    <table class="fft-table">
+        <tr><th>N</th><th>T</th><th>Δf</th></tr>
+        <tr><td>256</td><td>5.8 ms</td><td>172.3 Hz</td></tr>
+        <tr><td>512</td><td>11.6 ms</td><td>86.1 Hz</td></tr>
+        <tr><td>1024</td><td>23.2 ms</td><td>43.1 Hz</td></tr>
+        <tr><td>2048</td><td>46.4 ms</td><td>21.5 Hz</td></tr>
+    </table>
+</div>
+
+<div class="piano-container" id="pianoContainer">
+    <div class="piano-slider" id="pianoSlider"></div>
+    <div class="black-keys" id="blackKeys"></div>
+</div>
+
+<div class="tip">
+🎹 黑键位置已修正（按真实钢琴 2+3 结构）<br>
+鼠标拖动 / ← → 键滑动
+</div>
+
+<script>
+const CONFIG = {
+    A4_FREQ: 440,
+    A4_INDEX: 48,
+    TOTAL_KEYS: 88,
+    NOTES: ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'],
+    BLACK_POS: [1,3,6,8,10]
+};
+
+function initPianoData() {
+    const data = [];
+    let octave = 0;
+    let idx = 9; // A0
+
+    for (let i = 0; i < CONFIG.TOTAL_KEYS; i++) {
+        const freq = CONFIG.A4_FREQ * Math.pow(2,(i-CONFIG.A4_INDEX)/12);
+        const note = CONFIG.NOTES[idx];
+        const isBlack = CONFIG.BLACK_POS.includes(idx);
+
+        data.push({
+            index: i,
+            note,
+            full: note + octave,
+            freq,
+            isBlack
+        });
+
+        if (idx === 11) { idx = 0; octave++; }
+        else idx++;
+    }
+    return data;
+}
+
+function renderWhiteKeys(data, el) {
+    el.innerHTML = '';
+    data.forEach(k => {
+        if (!k.isBlack) {
+            el.innerHTML += `
+            <div class="white-key">
+                <div class="white-label">
+                    ${k.full}<br>
+                    <div class="freq">${k.freq.toFixed(1)} Hz</div>
+                </div>
+            </div>`;
+        }
+    });
+}
+
+/* ===== 黑键精确定位 ===== */
+function renderBlackKeys(data, el) {
+    el.innerHTML = '';
+
+    const whiteWidth = document.querySelector('.white-key').offsetWidth;
+    const blackWidth = 48;
+    let whiteIndex = -1;
+
+    data.forEach(k => {
+        if (!k.isBlack) {
+            whiteIndex++;
+            return;
+        }
+
+        const base = k.note;
+        const offsetRatio = 0.7; // 黑键位于右侧白键前
+
+        const left =
+            whiteIndex * whiteWidth +
+            whiteWidth * offsetRatio -
+            blackWidth / 2;
+
+        const b = document.createElement('div');
+        b.className = 'black-key';
+        b.style.left = left + 'px';
+        b.innerHTML = `<div class="black-label">${k.freq.toFixed(1)} Hz</div>`;
+        el.appendChild(b);
+    });
+
+    el.style.width = document.getElementById('pianoSlider').scrollWidth + 'px';
+}
+
+/* ===== 拖拽 ===== */
+function bindDrag(container, slider, blacks) {
+    let down = false, startX = 0, startT = 0, maxX = 0;
+
+    function calc() {
+        maxX = Math.max(0, slider.scrollWidth - container.clientWidth);
+    }
+
+    function setX(x) {
+        x = Math.max(-maxX, Math.min(0, x));
+        slider.style.transform = `translateX(${x}px)`;
+        blacks.style.transform = `translateX(${x}px)`;
+    }
+
+    function getX() {
+        const t = getComputedStyle(slider).transform;
+        if (t === 'none') return 0;
+        return parseFloat(t.split(',')[4]);
+    }
+
+    calc();
+    window.addEventListener('resize', () => {
+        calc();
+        setX(getX());
+        blacks.style.width = slider.scrollWidth + 'px';
+    });
+
+    slider.onmousedown = e => {
+        down = true;
+        startX = e.clientX;
+        startT = getX();
+        slider.style.transition = blacks.style.transition = 'none';
+    };
+
+    document.onmousemove = e => {
+        if (!down) return;
+        setX(startT + e.clientX - startX);
+    };
+
+    document.onmouseup = () => {
+        down = false;
+        slider.style.transition = blacks.style.transition = 'transform .08s';
+    };
+
+    document.onkeydown = e => {
+        let x = getX();
+        if (e.key === 'ArrowLeft') x -= 200;
+        if (e.key === 'ArrowRight') x += 200;
+        setX(x);
+    };
+}
+
+/* ===== 启动 ===== */
+window.onload = () => {
+    const data = initPianoData();
+    const slider = document.getElementById('pianoSlider');
+    const blacks = document.getElementById('blackKeys');
+    const container = document.getElementById('pianoContainer');
+
+    renderWhiteKeys(data, slider);
+    renderBlackKeys(data, blacks);
+    bindDrag(container, slider, blacks);
+};
+</script>
+
+</body>
+</html>

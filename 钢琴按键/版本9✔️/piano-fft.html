@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>钢琴键盘（黑键居中 & 顶部对齐）</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial}
+
+body{background:#f5f5f5}
+
+/* ===== 钢琴容器 ===== */
+.piano-container{
+    position:relative;
+    height:420px;
+    overflow:hidden;
+    padding:20px;
+}
+
+/* 滑动层（白键） */
+.piano-slider{
+    position:absolute;
+    top:0;
+    left:0;
+    display:flex;
+    align-items:flex-end;
+    cursor:grab;
+    transition:transform .08s;
+}
+
+/* ===== 白键 ===== */
+.white-key{
+    position:relative;
+    width:80px;
+    height:360px;
+    background:#fff;
+    border:1px solid #ccc;
+}
+
+/* ===== 黑键容器（与白键同一顶部） ===== */
+.black-keys{
+    position:absolute;
+    top:0;
+    left:0;
+    height:220px;
+    pointer-events:none;
+    z-index:2;
+}
+
+/* ===== 黑键 ===== */
+.black-key{
+    position:absolute;
+    top:0;                 /* ★ 顶部与白键对齐 */
+    width:48px;
+    height:220px;
+    background:#222;
+    border-radius:0 0 6px 6px;
+    pointer-events:auto;
+}
+</style>
+</head>
+
+<body>
+
+<div class="piano-container" id="container">
+    <div class="piano-slider" id="slider"></div>
+    <div class="black-keys" id="blacks"></div>
+</div>
+
+<script>
+const NOTES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const BLACK_POS = [1,3,6,8,10];
+const TOTAL = 88;
+
+function buildData(){
+    let data=[], idx=9, octave=0;
+    for(let i=0;i<TOTAL;i++){
+        const note = NOTES[idx];
+        data.push({note,isBlack:BLACK_POS.includes(idx)});
+        idx===11?(idx=0,octave++):idx++;
+    }
+    return data;
+}
+
+/* 白键 */
+function renderWhite(data, el){
+    el.innerHTML='';
+    data.forEach(k=>{
+        if(!k.isBlack){
+            el.innerHTML+=`<div class="white-key"></div>`;
+        }
+    });
+}
+
+/* 黑键：正中间 + 顶部对齐 */
+function renderBlack(data, el){
+    el.innerHTML='';
+    const whiteW = document.querySelector('.white-key').offsetWidth;
+    const blackW = 48;
+    let whiteIndex = -1;
+
+    data.forEach(k=>{
+        if(!k.isBlack){
+            whiteIndex++;
+            return;
+        }
+
+        const left =
+            whiteIndex * whiteW +
+            whiteW -
+            blackW / 2;
+
+        const b = document.createElement('div');
+        b.className='black-key';
+        b.style.left = left + 'px';
+        el.appendChild(b);
+    });
+
+    el.style.width = document.getElementById('slider').scrollWidth + 'px';
+}
+
+/* 拖拽同步 */
+function bind(container, slider, blacks){
+    let down=false,startX=0,startT=0,maxX=0;
+
+    function calc(){
+        maxX=Math.max(0,slider.scrollWidth-container.clientWidth);
+    }
+    function setX(x){
+        x=Math.max(-maxX,Math.min(0,x));
+        slider.style.transform=`translateX(${x}px)`;
+        blacks.style.transform=`translateX(${x}px)`;
+    }
+    function getX(){
+        const t=getComputedStyle(slider).transform;
+        return t==='none'?0:parseFloat(t.split(',')[4]);
+    }
+
+    calc();
+    window.onresize=()=>{calc();setX(getX())};
+
+    slider.onmousedown=e=>{
+        down=true;
+        startX=e.clientX;
+        startT=getX();
+        slider.style.transition=blacks.style.transition='none';
+    };
+
+    document.onmousemove=e=>{
+        if(!down)return;
+        setX(startT+e.clientX-startX);
+    };
+
+    document.onmouseup=()=>{
+        down=false;
+        slider.style.transition=blacks.style.transition='transform .08s';
+    };
+}
+
+const data=buildData();
+const slider=document.getElementById('slider');
+const blacks=document.getElementById('blacks');
+const container=document.getElementById('container');
+
+renderWhite(data,slider);
+renderBlack(data,blacks);
+bind(container,slider,blacks);
+</script>
+
+</body>
+</html>

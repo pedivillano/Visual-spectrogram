@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>钢琴按键频率表 + FFT参数对照（真实钢琴布局版）</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", Arial, sans-serif;
+        }
+
+        body {
+            background-color: #f5f5f5;
+            color: #333;
+            overflow-x: hidden;
+        }
+
+        /* FFT参数表 - 顶部粘性固定 */
+        .fft-table-container {
+            width: 100%;
+            padding: 20px;
+            background-color: #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            margin-bottom: 40px;
+        }
+
+        .fft-table-container h2 {
+            text-align: center;
+            margin-bottom: 15px;
+            color: #2c3e50;
+            font-size: 20px;
+        }
+
+        .fft-table {
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+            border-collapse: collapse;
+            text-align: center;
+        }
+
+        .fft-table th, .fft-table td {
+            border: 1px solid #ddd;
+            padding: 12px 8px;
+        }
+
+        .fft-table th {
+            background-color: #3498db;
+            color: #fff;
+            font-weight: bold;
+        }
+
+        .fft-table tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+
+        .fft-table tr:hover {
+            background-color: #e3f2fd;
+        }
+
+        /* 钢琴整体容器 - 隐藏横向滚动，仅通过拖拽/键盘滑动 */
+        .piano-wrap {
+            width: 100%;
+            padding: 0 20px;
+            position: relative;
+            height: 500px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        /* 钢琴滑动容器 - 白键等宽排列，黑键绝对定位跨间隙 */
+        .piano-scroll {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            display: flex;
+            align-items: flex-end;
+            gap: 0;
+            cursor: grab;
+            transition: transform 0.08s ease-out;
+        }
+        .piano-scroll:active {
+            cursor: grabbing;
+        }
+
+        /* 白键单元 - 80px宽（电脑端），包含白键+底部标注，相对定位 */
+        .white-key-unit {
+            position: relative;
+            width: 80px; /* 电脑端白键宽度（核心加宽） */
+            height: 380px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+        }
+
+        /* 白键样式 - 标准钢琴白键，无偏移 */
+        .white-key {
+            width: 100%;
+            height: 100%;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-bottom-left-radius: 8px;
+            border-bottom-right-radius: 8px;
+            z-index: 1;
+            transition: background-color 0.2s ease;
+        }
+        .white-key:hover {
+            background-color: #f0f8ff;
+        }
+
+        /* 白键底部外部标注 - 完全脱离琴键，正下方居中 */
+        .white-note-label {
+            position: absolute;
+            bottom: -30px; /* 远离琴键，无遮挡 */
+            color: #2c3e50;
+            font-size: 14px;
+            line-height: 1.5;
+            text-align: center;
+            width: 100%;
+            z-index: 3;
+        }
+        .white-note-label .freq {
+            font-size: 12px;
+            color: #666;
+            margin-top: 2px;
+        }
+
+        /* 黑键容器 - 绝对定位在钢琴顶部，承载所有黑键，z-index高于白键 */
+        .black-keys-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 240px; /* 黑键高度 */
+            width: 100%;
+            display: flex;
+            align-items: flex-start;
+            justify-content: flex-start;
+            z-index: 2;
+            pointer-events: none; /* 不遮挡白键拖拽 */
+        }
+
+        /* 黑键单元 - 包含黑键+顶部标注，宽度匹配黑键，左偏移至白键间隙 */
+        .black-key-unit {
+            position: relative;
+            width: 48px; /* 电脑端黑键宽度 */
+            height: 100%;
+            margin-left: 56px; /* 核心偏移：定位到C/D白键间隙（80-48/2=56） */
+            pointer-events: auto; /* 恢复黑键hover/点击 */
+        }
+
+        /* 黑键样式 - 标准钢琴黑键，无重叠，跨白键间隙 */
+        .black-key {
+            width: 100%;
+            height: 100%;
+            background-color: #222;
+            border-bottom-left-radius: 6px;
+            border-bottom-right-radius: 6px;
+            transition: background-color 0.2s ease;
+            cursor: pointer;
+        }
+        .black-key:hover {
+            background-color: #444;
+        }
+
+        /* 黑键顶部外部标注 - 完全脱离琴键，正上方居中，白色字体更醒目 */
+        .black-note-label {
+            position: absolute;
+            top: -25px; /* 远离琴键，无遮挡 */
+            color: #2c3e50;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: center;
+            width: 100%;
+            z-index: 3;
+        }
+
+        /* 滑动提示 */
+        .scroll-tip {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            line-height: 1.8;
+            margin-bottom: 30px;
+        }
+
+        /* 响应式适配 - 平板/手机端等比例缩放，黑键偏移同步调整 */
+        @media (max-width: 768px) {
+            .piano-wrap {
+                height: 420px;
+            }
+            .white-key-unit {
+                width: 60px; /* 平板端白键宽度 */
+                height: 300px;
+            }
+            .black-keys-container {
+                height: 180px; /* 平板端黑键高度 */
+            }
+            .black-key-unit {
+                width: 36px; /* 平板端黑键宽度 */
+                margin-left: 42px; /* 同步偏移：60-36/2=42 */
+            }
+            .white-note-label {
+                font-size: 12px;
+                bottom: -25px;
+            }
+            .white-note-label .freq {
+                font-size: 10px;
+            }
+            .black-note-label {
+                font-size: 12px;
+                top: -20px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .piano-wrap {
+                height: 350px;
+            }
+            .white-key-unit {
+                width: 45px; /* 手机端白键宽度 */
+                height: 220px;
+            }
+            .black-keys-container {
+                height: 140px; /* 手机端黑键高度 */
+            }
+            .black-key-unit {
+                width: 27px; /* 手机端黑键宽度 */
+                margin-left: 31.5px; /* 同步偏移：45-27/2=31.5 */
+            }
+            .white-note-label {
+                font-size: 10px;
+                bottom: -20px;
+            }
+            .black-note-label {
+                font-size: 10px;
+                top: -18px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- FFT参数对照表 - 顶部固定，采样率44100Hz -->
+    <div class="fft-table-container">
+        <h2>FFT 窗口长度与分析参数对照表（采样率 fs = 44100 Hz）</h2>
+        <table class="fft-table">
+            <thead>
+                <tr>
+                    <th>FFT窗口长度 N</th>
+                    <th>分析片段长度 T = N/fs</th>
+                    <th>频率精度 Δf = fs/N（Hz）</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>256</td>
+                    <td>≈ 0.0058 s（5.8 ms）</td>
+                    <td>≈ 172.27</td>
+                </tr>
+                <tr>
+                    <td>512</td>
+                    <td>≈ 0.0116 s（11.6 ms）</td>
+                    <td>≈ 86.13</td>
+                </tr>
+                <tr>
+                    <td>1024</td>
+                    <td>≈ 0.0232 s（23.2 ms）</td>
+                    <td>≈ 43.07</td>
+                </tr>
+                <tr>
+                    <td>2048</td>
+                    <td>≈ 0.0464 s（46.4 ms）</td>
+                    <td>≈ 21.53</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 钢琴整体容器 - 真实布局版 -->
+    <div class="piano-wrap" id="pianoWrap">
+        <div class="piano-scroll" id="pianoScroll">
+            <!-- 白键+白键标注：由JS动态生成 -->
+        </div>
+        <!-- 黑键容器+黑键+黑键标注：由JS动态生成 -->
+        <div class="black-keys-container" id="blackKeysContainer"></div>
+    </div>
+
+    <!-- 操作提示 -->
+    <div class="scroll-tip">
+        👉 鼠标拖动/键盘左右箭头 滑动钢琴 | 88键<u>真实钢琴黑键布局</u> | 白键<u>正下方外部</u>：音名+中文+频率 | 黑键<u>正上方外部</u>：精准频率 | 琴键加宽+正常拖拽逻辑
+    </div>
+
+    <script>
+        // 88键钢琴核心类 - 十二平均律（A4=440Hz）+ 真实黑键布局
+        class RealPiano {
+            constructor() {
+                // 基础配置
+                this.A4 = 440.0; // 国际标准基准音
+                this.A4KeyIndex = 48; // A4是88键第49个（索引48，0开始）
+                this.keys = []; // 存储88键完整信息
+                this.blackKeyStep = [2,2,1,2,2,2,1]; // 钢琴黑白键间隔规律（全全半全全全半）
+                // DOM元素
+                this.pianoScroll = document.getElementById('pianoScroll');
+                this.blackKeysContainer = document.getElementById('blackKeysContainer');
+                this.pianoWrap = document.getElementById('pianoWrap');
+                this.scrollMaxX = 0; // 滑动边界限制
+
+                // 初始化流程
+                this.initKeys(); // 初始化88键音名/频率/中文/黑白键
+                this.renderWhiteKeys(); // 渲染白键+底部标注
+                this.renderBlackKeys(); // 渲染黑键+顶部标注（真实布局）
+                this.calcScrollBoundary(); // 计算滑动边界
+                this.bindEvents(); // 绑定所有交互事件
+            }
+
+            // 十二平均律频率计算：f = A4 * 2^((键索引 - A4索引)/12)
+            calculateFreq(keyIndex) {
+                return this.A4 * Math.pow(2, (keyIndex - this.A4KeyIndex) / 12);
+            }
+
+            // 初始化88键完整信息：区分白键/黑键，匹配音名+中文+频率
+            initKeys() {
+                const baseNotes = ['C','D','E','F','G','A','B']; // 白键基础音名
+                const chineseNames = { 'C':'哆','D':'来','E':'咪','F':'发','G':'索','A':'拉','B':'西' };
+                let currentKey = 0; // 当前音级索引
+                let octave = 0; // 八度从0开始（A0为起始）
+                let noteIndex = 9; // 88键起始为A0（对应12音名循环的第9位）
+
+                // 遍历生成88键信息
+                for (let i = 0; i < 88; i++) {
+                    const freq = this.calculateFreq(i);
+                    // 12音名循环（含升降调）
+                    const noteNamesCycle = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+                    let note = noteNamesCycle[noteIndex];
+                    const isBlack = note.includes('#'); // 带#为黑键
+                    
+                    // 白键音名+中文名称（黑键为升调）
+                    let baseNote = note.replace('#', '');
+                    let chinese = isBlack ? `升${chineseNames[baseNote]}${octave}` : chineseNames[baseNote] || '';
+                    let fullNoteName = `${note}${octave}`;
+
+                    // 八度递增（B音后升八度）
+                    if (noteIndex === 11) {
+                        noteIndex = 0;
+                        octave++;
+                    } else {
+                        noteIndex++;
+                    }
+
+                    // 最后一个键特殊修正（88键结束为C8）
+                    if (i === 87) {
+                        fullNoteName = 'C8';
+                        chinese = '哆8';
+                        isBlack = false;
+                    }
+
+                    // 存入键信息
+                    this.keys.push({
+                        index: i,
+                        freq: freq,
+                        note: fullNoteName,
+                        chinese: chinese,
+                        isBlack: isBlack,
+                        baseNote: baseNote
+                    });
+
+                    // 白键音级步进
+                    if (!isBlack) {
+                        currentKey = (currentKey + 1) % 7;
+                    }
+                }
+            }
+
+            // 渲染白键+底部外部标注：等宽排列，无偏移，贴合真实钢琴白键布局
+            renderWhiteKeys() {
+                let whiteKeysHtml = '';
+                // 过滤白键，遍历渲染
+                this.keys.filter(key => !key.isBlack).forEach(key => {
+                    whiteKeysHtml += `
+                        <div class="white-key-unit">
+                            <div class="white-key"></div>
+                            <div class="white-note-label">
+                                <span>${key.note}</span><br>
+                                <span>${key.chinese}</span>
+                                <div class="freq">${key.freq.toFixed(1)} Hz</div>
+                            </div>
+                        </div>
+                    `;
+                });
+                this.pianoScroll.innerHTML = whiteKeysHtml;
+            }
+
+            // 渲染黑键+顶部外部标注：真实钢琴布局（跨白键间隙，无居中偏移）
+            renderBlackKeys() {
+                let blackKeysHtml = '';
+                let blackKeyCount = 0;
+                // 过滤黑键，遍历渲染（按真实钢琴间隙排列）
+                this.keys.filter(key => key.isBlack).forEach((key, idx) => {
+                    // 黑键组间隔（每5个黑键为一组，对应钢琴的黑键排列）
+                    const groupGap = (idx > 0 && idx % 5 === 0) ? 2 : 0;
+                    blackKeyCount += groupGap;
+                    // 拼接黑键单元（含顶部频率标注，完全脱离琴键）
+                    blackKeysHtml += `
+                        <div class="black-key-unit" style="margin-left: ${56 + blackKeyCount * 80}px">
+                            <div class="black-note-label">${key.freq.toFixed(1)} Hz</div>
+                            <div class="black-key"></div>
+                        </div>
+                    `;
+                    blackKeyCount++;
+                });
+                this.blackKeysContainer.innerHTML = blackKeysHtml;
+                // 黑键容器与钢琴滑动容器联动（同步拖拽）
+                this.blackKeysContainer.style.width = this.pianoScroll.scrollWidth + 'px';
+            }
+
+            // 计算滑动边界：防止拖拽超出琴键范围，无空白区域
+            calcScrollBoundary() {
+                const wrapWidth = this.pianoWrap.clientWidth;
+                const scrollWidth = this.pianoScroll.scrollWidth;
+                this.scrollMaxX = Math.max(0, scrollWidth - wrapWidth);
+            }
+
+            // 限制滑动范围：左滑最大为-scrollMaxX，右滑最大为0
+            clampTransformX(x) {
+                return Math.max(-this.scrollMaxX, Math.min(0, x));
+            }
+
+            // 绑定所有交互事件：正常拖拽+键盘箭头+触摸+窗口自适应（黑白键同步滑动）
+            bindEvents() {
+                let startX = 0;
+                let startTransformX = 0;
+                let isDragging = false;
+
+                // 窗口大小变化：重新计算边界+同步黑键容器宽度
+                window.addEventListener('resize', () => {
+                    this.calcScrollBoundary();
+                    this.blackKeysContainer.style.width = this.pianoScroll.scrollWidth + 'px';
+                    this.setTransformX(this.clampTransformX(this.getTransformX()));
+                });
+
+                // 鼠标按下：记录初始位置，取消过渡更跟手
+                this.pianoScroll.addEventListener('mousedown', (e) => {
+                    isDragging = true;
+                    startX = e.clientX;
+                    startTransformX = this.getTransformX();
+                    this.pianoScroll.style.transition = 'none';
+                    this.blackKeysContainer.style.transition = 'none';
+                    document.body.style.userSelect = 'none';
+                });
+
+                // 鼠标移动：正常拖拽逻辑（左拖左滑/右拖右滑，无反向，黑白键同步）
+                document.addEventListener('mousemove', (e) => {
+                    if (!isDragging) return;
+                    e.preventDefault();
+                    const dx = e.clientX - startX;
+                    let newX = startTransformX + dx;
+                    newX = this.clampTransformX(newX);
+                    // 同步设置钢琴和黑键容器的滑动位置
+                    this.setTransformX(newX);
+                });
+
+                // 鼠标松开/离开：结束拖拽，恢复过渡和样式
+                const endDrag = () => {
+                    if (isDragging) {
+                        isDragging = false;
+                        this.pianoScroll.style.transition = 'transform 0.08s ease-out';
+                        this.blackKeysContainer.style.transition = 'transform 0.08s ease-out';
+                        document.body.style.userSelect = 'auto';
+                    }
+                };
+                document.addEventListener('mouseup', endDrag);
+                document.addEventListener('mouseleave', endDrag);
+
+                // 键盘左右箭头：精准滑动（每次200px），黑白键同步，带边界限制
+                document.addEventListener('keydown', (e) => {
+                    const scrollStep = 200;
+                    let currentX = this.getTransformX();
+                    if (e.key === 'ArrowLeft') currentX -= scrollStep;
+                    else if (e.key === 'ArrowRight') currentX += scrollStep;
+                    this.setTransformX(this.clampTransformX(currentX));
+                });
+
+                // 触摸事件：适配手机/平板，与鼠标逻辑一致，黑白键同步滑动
+                this.pianoScroll.addEventListener('touchstart', (e) => {
+                    startX = e.touches[0].clientX;
+                    startTransformX = this.getTransformX();
+                    this.pianoScroll.style.transition = 'none';
+                    this.blackKeysContainer.style.transition = 'none';
+                });
+                this.pianoScroll.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                    const dx = e.touches[0].clientX - startX;
+                    let newX = startTransformX + dx;
+                    this.setTransformX(this.clampTransformX(newX));
+                });
+                this.pianoScroll.addEventListener('touchend', () => {
+                    this.pianoScroll.style.transition = 'transform 0.08s ease-out';
+                    this.blackKeysContainer.style.transition = 'transform 0.08s ease-out';
+                });
+            }
+
+            // 工具方法：获取当前滑动X坐标
+            getTransformX() {
+                const transform = window.getComputedStyle(this.pianoScroll).transform;
+                return transform === 'none' ? 0 : parseFloat(transform.split(',')[4] || 0) || 0;
+            }
+
+            // 工具方法：设置滑动X坐标（黑白键容器同步）
+            setTransformX(x) {
+                this.pianoScroll.style.transform = `translateX(${x}px)`;
+                this.blackKeysContainer.style.transform = `translateX(${x}px)`;
+            }
+        }
+
+        // 页面加载完成后初始化真实布局钢琴
+        window.onload = () => {
+            new RealPiano();
+        };
+    </script>
+</body>
+</html>

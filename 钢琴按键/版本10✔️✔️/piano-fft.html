@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>钢琴键盘（Edge 拖拽问题已修复）</title>
+
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: "Microsoft YaHei", Arial, sans-serif;
+}
+
+body {
+    background: #f5f5f5;
+}
+
+/* ===== 禁止钢琴区域文本选择 / 拖拽（Edge 关键） ===== */
+.piano-container,
+.piano-container * {
+    user-select: none;
+    -webkit-user-select: none;
+    -ms-user-select: none;
+    -webkit-user-drag: none;
+}
+
+/* ===== 钢琴容器 ===== */
+.piano-container {
+    position: relative;
+    height: 420px;
+    overflow: hidden;
+    padding: 20px;
+}
+
+/* ===== 白键滑动层 ===== */
+.piano-slider {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: flex;
+    align-items: flex-end;
+    cursor: grab;
+    transition: transform 0.08s ease-out;
+}
+
+/* ===== 白键 ===== */
+.white-key {
+    width: 80px;
+    height: 360px;
+    background: #fff;
+    border: 1px solid #ccc;
+}
+
+/* ===== 黑键容器（与白键同一坐标体系） ===== */
+.black-keys {
+    position: absolute;
+    top: 0;          /* ★ 与白键顶部对齐 */
+    left: 0;
+    height: 220px;
+    z-index: 2;
+    pointer-events: none;
+}
+
+/* ===== 黑键 ===== */
+.black-key {
+    position: absolute;
+    top: 0;          /* ★ 顶部与白键完全对齐 */
+    width: 48px;
+    height: 220px;
+    background: #222;
+    border-radius: 0 0 6px 6px;
+    pointer-events: auto;
+}
+</style>
+</head>
+
+<body>
+
+<div class="piano-container" id="container">
+    <div class="piano-slider" id="slider"></div>
+    <div class="black-keys" id="blacks"></div>
+</div>
+
+<script>
+/* ===== 钢琴数据 ===== */
+const NOTES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const BLACK_POS = [1,3,6,8,10];
+const TOTAL = 88;
+
+function buildData() {
+    let data = [];
+    let idx = 9; // A0
+    let octave = 0;
+
+    for (let i = 0; i < TOTAL; i++) {
+        const note = NOTES[idx];
+        data.push({ note, isBlack: BLACK_POS.includes(idx) });
+
+        if (idx === 11) { idx = 0; octave++; }
+        else idx++;
+    }
+    return data;
+}
+
+/* ===== 渲染白键 ===== */
+function renderWhite(data, el) {
+    el.innerHTML = '';
+    data.forEach(k => {
+        if (!k.isBlack) {
+            el.innerHTML += `<div class="white-key"></div>`;
+        }
+    });
+}
+
+/* ===== 渲染黑键（居中 + 顶部对齐） ===== */
+function renderBlack(data, el) {
+    el.innerHTML = '';
+
+    const whiteW = document.querySelector('.white-key').offsetWidth;
+    const blackW = 48;
+    let whiteIndex = -1;
+
+    data.forEach(k => {
+        if (!k.isBlack) {
+            whiteIndex++;
+            return;
+        }
+
+        /* ★ 两个白键正中间 */
+        const left =
+            whiteIndex * whiteW +
+            whiteW -
+            blackW / 2;
+
+        const b = document.createElement('div');
+        b.className = 'black-key';
+        b.style.left = left + 'px';
+        el.appendChild(b);
+    });
+
+    el.style.width = document.getElementById('slider').scrollWidth + 'px';
+}
+
+/* ===== Pointer Events 拖拽（Edge 官方推荐） ===== */
+function bindDrag(container, slider, blacks) {
+    let dragging = false;
+    let startX = 0;
+    let startT = 0;
+    let maxX = 0;
+
+    function calcBounds() {
+        maxX = Math.max(0, slider.scrollWidth - container.clientWidth);
+    }
+
+    function setX(x) {
+        x = Math.max(-maxX, Math.min(0, x));
+        slider.style.transform = `translateX(${x}px)`;
+        blacks.style.transform = `translateX(${x}px)`;
+    }
+
+    function getX() {
+        const t = getComputedStyle(slider).transform;
+        return t === 'none' ? 0 : parseFloat(t.split(',')[4]);
+    }
+
+    calcBounds();
+    window.addEventListener('resize', () => {
+        calcBounds();
+        setX(getX());
+    });
+
+    slider.addEventListener('pointerdown', e => {
+        e.preventDefault();                     // ★ 阻止 Edge Drag to Search
+        slider.setPointerCapture(e.pointerId); // ★ 锁定指针（关键）
+
+        dragging = true;
+        startX = e.clientX;
+        startT = getX();
+
+        slider.style.transition = blacks.style.transition = 'none';
+        slider.style.cursor = 'grabbing';
+    });
+
+    slider.addEventListener('pointermove', e => {
+        if (!dragging) return;
+        setX(startT + e.clientX - startX);
+    });
+
+    slider.addEventListener('pointerup', e => {
+        dragging = false;
+        slider.releasePointerCapture(e.pointerId);
+
+        slider.style.transition =
+            blacks.style.transition = 'transform 0.08s ease-out';
+        slider.style.cursor = 'grab';
+    });
+
+    slider.addEventListener('pointercancel', () => dragging = false);
+}
+
+/* ===== 启动 ===== */
+const data = buildData();
+const slider = document.getElementById('slider');
+const blacks = document.getElementById('blacks');
+const container = document.getElementById('container');
+
+renderWhite(data, slider);
+renderBlack(data, blacks);
+bindDrag(container, slider, blacks);
+</script>
+
+</body>
+</html>
