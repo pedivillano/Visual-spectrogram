@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FFT Step Music Player</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>FFT Step Music Player</h1>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label>FFT Size:</label>
+                <select id="fftSize">
+                    <option value="256">256</option>
+                    <option value="512">512</option>
+                    <option value="1024" selected>1024</option>
+                    <option value="2048">2048</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>Auto Play Delay (s):</label>
+                <input type="number" id="autoDelay" value="1" step="0.1" min="0">
+            </div>
+            <div class="info-panel">
+                <p>Duration: <span id="durationDisplay">0</span> ms</p>
+                <p>FPS: <span id="fpsDisplay">0</span> Hz</p>
+            </div>
+        </div>
+
+        <div class="buttons">
+            <button id="btnLoad">Load Audio</button>
+            <button id="btnStep">Step Play</button>
+            <button id="btnAuto">Toggle Auto</button>
+            <button id="btnPause">Pause</button>
+        </div>
+
+        <canvas id="visualizer"></canvas>
+        <input type="file" id="fileInput" accept="audio/*">
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>钢琴（标准按键名称显示 + 频率显示 + 滑动控制）</title>
+
+<style>
+* {margin:0; padding:0; box-sizing:border-box;}
+body {background:#f5f5f5; padding-bottom:80px;}
+
+.piano-container, .piano-container * {
+    user-select:none;
+    -webkit-user-select:none;
+    -webkit-user-drag:none;
+}
+
+.piano-container {
+    position:relative;
+    height:460px;
+    overflow:hidden;
+    padding:20px;
+    margin-bottom:20px;
+}
+
+.piano-slider {
+    position:absolute;
+    top:0;
+    left:0;
+    display:flex;
+    align-items:flex-end;
+    /* 移除 cursor:grab; 因为不再支持直接拖动 */
+    transition:transform 0.08s ease-out;
+}
+
+/* ===== 白键 ===== */
+.white-key {
+    width:80px;
+    height:360px;
+    background:#fff;
+    border:1px solid #ccc;
+    position:relative;
+    cursor:pointer; /* 添加指针样式表明可点击 */
+}
+
+.white-key-info {
+    position:absolute;
+    bottom:-40px;
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:4px;
+}
+
+.white-key .note-name {
+    font-size:13px;
+    color:#333;
+    font-weight:500;
+    line-height:1.2;
+}
+
+.white-key .note-freq {
+    font-size:11px;
+    color:#666;
+    line-height:1.2;
+}
+
+/* ===== 黑键 ===== */
+.black-keys {
+    position:absolute;
+    top:0;
+    left:0;
+    height:220px;
+    z-index:2;
+}
+
+.black-key {
+    position:absolute;
+    top:0;
+    width:48px;
+    height:220px;
+    background:#222;
+    border-radius:0 0 6px 6px;
+    display:flex;
+    flex-direction:column;
+    justify-content:flex-end;
+    align-items:center;
+    padding-bottom:10px;
+    cursor:pointer;
+}
+
+.black-key-info {
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:2px;
+    width:100%;
+}
+
+.black-key .note-name {
+    font-size:12px;
+    color:#fff;
+    font-weight:500;
+    line-height:1.1;
+    text-shadow:0 1px 2px rgba(0,0,0,0.7);
+}
+
+.black-key .note-freq {
+    font-size:9px;
+    color:#ccc;
+    line-height:1.1;
+    text-shadow:0 1px 2px rgba(0,0,0,0.7);
+}
+
+/* ===== 滑块控制 ===== */
+.slider-control {
+    width:100%;
+    max-width:1400px;
+    margin:0 auto;
+    padding:0 20px;
+    display:flex;
+    align-items:center;
+    gap:15px;
+}
+
+.slider-track {
+    flex:1;
+    height:8px;
+    background:#e0e0e0;
+    border-radius:4px;
+    position:relative;
+    cursor:pointer;
+}
+
+.slider-thumb {
+    position:absolute;
+    top:50%;
+    transform:translate(-50%, -50%);
+    width:24px;
+    height:24px;
+    background:#3498db;
+    border-radius:50%;
+    cursor:grab;
+    box-shadow:0 2px 6px rgba(0,0,0,0.2);
+}
+
+/* ===== 按键悬停效果 ===== */
+.white-key:hover {
+    background:#f9f9f9;
+}
+
+.white-key:active, .white-key.active {
+    background:#e0e0e0;
+}
+
+.black-key:hover {
+    background:#333;
+}
+
+.black-key:active, .black-key.active {
+    background:#444;
+}
+
+/* 添加响应式调整 */
+@media (max-width: 768px) {
+    .white-key {
+        width:70px;
+    }
+    
+    .white-key-info {
+        bottom:-36px;
+    }
+    
+    .white-key .note-name {
+        font-size:12px;
+    }
+    
+    .white-key .note-freq {
+        font-size:10px;
+    }
+    
+    .black-key {
+        width:42px;
+    }
+    
+    .black-key .note-name {
+        font-size:11px;
+    }
+    
+    .black-key .note-freq {
+        font-size:8px;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<div class="piano-container" id="container">
+    <div class="piano-slider" id="slider"></div>
+    <div class="black-keys" id="blacks"></div>
+</div>
+
+<div class="slider-control">
+    <span class="slider-label">琴键视图滑动</span>
+    <div class="slider-track" id="sliderTrack">
+        <div class="slider-thumb" id="sliderThumb"></div>
+    </div>
+</div>
+
+<script>
+/* ===== 真实钢琴音效 ===== */
+let audioCtx = null;
+// 预加载的音频缓冲区
+const audioBuffers = new Map();
+
+// 初始化音频上下文和预加载音效
+async function initAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // 预加载所有音符的音频样本
+        await preloadAudioSamples();
+    }
+    if (audioCtx.state === 'suspended') {
+        await audioCtx.resume();
+    }
+    return audioCtx;
+}
+
+// 预加载音频样本（使用更真实的钢琴音色）
+async function preloadAudioSamples() {
+    // 这里使用合成音效作为示例，实际应用中可以使用真实钢琴采样
+    // 为每个音符创建独特的音色
+    const data = buildData();
+    
+    for (const note of data) {
+        // 创建更真实的钢琴音色
+        const buffer = createPianoTone(note.freq);
+        audioBuffers.set(note.fullName, buffer);
+    }
+}
+
+// 创建钢琴音色（使用多个振荡器模拟真实钢琴声音）
+function createPianoTone(freq) {
+    const duration = 2.0;
+    const sampleRate = audioCtx.sampleRate;
+    const frameCount = sampleRate * duration;
+    const buffer = audioCtx.createBuffer(2, frameCount, sampleRate);
+    
+    // 填充左右声道
+    for (let channel = 0; channel < 2; channel++) {
+        const data = buffer.getChannelData(channel);
+        
+        // 主振荡器（正弦波，基础频率）
+        for (let i = 0; i < frameCount; i++) {
+            const t = i / sampleRate;
+            
+            // 快速起音，缓慢衰减
+            const envelope = Math.exp(-t * 2) * (1 - Math.exp(-t * 50));
+            
+            // 基础频率（正弦波）
+            let sample = 0.6 * Math.sin(2 * Math.PI * freq * t);
+            
+            // 添加谐波（模拟钢琴丰富的泛音结构）
+            sample += 0.3 * Math.sin(2 * Math.PI * freq * 2 * t) * Math.exp(-t * 3);
+            sample += 0.15 * Math.sin(2 * Math.PI * freq * 4 * t) * Math.exp(-t * 4);
+            sample += 0.1 * Math.sin(2 * Math.PI * freq * 0.5 * t) * Math.exp(-t * 1.5);
+            
+            // 应用包络
+            sample *= envelope;
+            
+            // 添加轻微噪声模拟击弦声
+            if (t < 0.01) {
+                sample += (Math.random() * 2 - 1) * 0.02 * (1 - t / 0.01);
+            }
+            
+            data[i] = sample;
+        }
+    }
+    
+    return buffer;
+}
+
+// 播放音符（使用预加载的音频缓冲区）
+function playNote(freq, fullName) {
+    if (!audioCtx) {
+        initAudio().then(() => playNote(freq, fullName));
+        return;
+    }
+    
+    try {
+        // 使用预加载的缓冲区
+        if (audioBuffers.has(fullName)) {
+            const source = audioCtx.createBufferSource();
+            source.buffer = audioBuffers.get(fullName);
+            
+            const gainNode = audioCtx.createGain();
+            gainNode.gain.value = 0.7;
+            
+            source.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            source.start();
+            
+            // 自动停止（缓冲区长度）
+            source.stop(audioCtx.currentTime + 1.8);
+        } else {
+            // 备用方案：使用振荡器
+            playNoteWithOscillator(freq);
+        }
+    } catch (error) {
+        console.warn('使用缓冲区播放失败，回退到振荡器:', error);
+        playNoteWithOscillator(freq);
+    }
+}
+
+// 备用方案：使用振荡器合成音色
+function playNoteWithOscillator(freq) {
+    const ctx = audioCtx;
+    const t = ctx.currentTime;
+    
+    // 创建更复杂的音色（多个振荡器）
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    
+    // 设置振荡器
+    osc1.type = 'sine';
+    osc1.frequency.value = freq;
+    
+    osc2.type = 'sawtooth';
+    osc2.frequency.value = freq * 2;
+    
+    // 设置滤波器（模拟钢琴音色）
+    filter.type = 'lowpass';
+    filter.frequency.value = 2000;
+    filter.Q.value = 1;
+    
+    // 包络控制
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.8, t + 0.02); // 快速起音
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 1.5); // 缓慢衰减
+    
+    // 连接节点
+    osc1.connect(gain);
+    osc2.connect(gain);
+    gain.connect(filter);
+    filter.connect(ctx.destination);
+    
+    // 开始播放
+    osc1.start(t);
+    osc2.start(t);
+    osc1.stop(t + 1.5);
+    osc2.stop(t + 1.5);
+}
+
+/* ===== Piano Data ===== */
+const NOTES_ORDER = ['A','A#','B','C','C#','D','D#','E','F','F#','G','G#'];
+const BLACK_SET = new Set(['A#','C#','D#','F#','G#']);
+
+function buildData() {
+    const A0 = 27.5;
+    let octave = 0;
+    const data = [];
+    for (let i = 0; i < 88; i++) {
+        const note = NOTES_ORDER[i % 12];
+        if (note === 'C' && i !== 0) octave++;
+        data.push({
+            note,
+            octave,
+            fullName: note + octave,
+            freq: A0 * Math.pow(2, i / 12),
+            isBlack: BLACK_SET.has(note)
+        });
+    }
+    return data;
+}
+
+/* ===== Render White Keys ===== */
+function renderWhite(data, el) {
+    el.innerHTML = '';
+    data.forEach(k => {
+        if (!k.isBlack) {
+            const d = document.createElement('div');
+            d.className = 'white-key';
+            d.dataset.freq = k.freq;
+            d.dataset.name = k.fullName;
+
+            const infoDiv = document.createElement('div');
+            infoDiv.className = 'white-key-info';
+            
+            const label = document.createElement('div');
+            label.className = 'note-name';
+            label.textContent = k.fullName;
+
+            const freq = document.createElement('div');
+            freq.className = 'note-freq';
+            freq.textContent = k.freq.toFixed(2) + ' Hz';
+
+            infoDiv.appendChild(label);
+            infoDiv.appendChild(freq);
+            d.appendChild(infoDiv);
+            
+            // 添加点击事件
+            d.addEventListener('mousedown', () => {
+                d.classList.add('active');
+                playNote(k.freq, k.fullName);
+            });
+            
+            d.addEventListener('mouseup', () => {
+                d.classList.remove('active');
+            });
+            
+            d.addEventListener('mouseleave', () => {
+                d.classList.remove('active');
+            });
+            
+            el.appendChild(d);
+        }
+    });
+}
+
+/* ===== Render Black Keys ===== */
+function renderBlack(data, el) {
+    el.innerHTML = '';
+    const whiteW = document.querySelector('.white-key').offsetWidth;
+    const blackW = 48;
+    let w = -1;
+
+    data.forEach(k => {
+        if (!k.isBlack) { w++; return; }
+
+        const b = document.createElement('div');
+        b.className = 'black-key';
+        b.style.left = (w * whiteW + whiteW - blackW / 2) + 'px';
+        b.dataset.freq = k.freq;
+        b.dataset.name = k.fullName;
+
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'black-key-info';
+        
+        const label = document.createElement('div');
+        label.className = 'note-name';
+        label.textContent = k.fullName;
+
+        const freq = document.createElement('div');
+        freq.className = 'note-freq';
+        freq.textContent = k.freq.toFixed(2) + ' Hz';
+
+        infoDiv.appendChild(label);
+        infoDiv.appendChild(freq);
+        b.appendChild(infoDiv);
+        
+        // 添加点击事件
+        b.addEventListener('mousedown', () => {
+            b.classList.add('active');
+            playNote(k.freq, k.fullName);
+        });
+        
+        b.addEventListener('mouseup', () => {
+            b.classList.remove('active');
+        });
+        
+        b.addEventListener('mouseleave', () => {
+            b.classList.remove('active');
+        });
+        
+        el.appendChild(b);
+    });
+
+    el.style.width = document.getElementById('slider').scrollWidth + 'px';
+}
+
+/* ===== 滑动相关 ===== */
+let maxScrollX = 0;
+const sliderTrack = document.getElementById('sliderTrack');
+const sliderThumb = document.getElementById('sliderThumb');
+
+function calcMaxScroll() {
+    const containerWidth = container.clientWidth;
+    const pianoTotalWidth = slider.scrollWidth;
+    maxScrollX = Math.max(0, pianoTotalWidth - containerWidth);
+    sliderThumb.style.maxLeft = (sliderTrack.offsetWidth - sliderThumb.offsetWidth) + 'px';
+}
+
+function pianoXToThumbLeft(x) {
+    const w = sliderTrack.offsetWidth - sliderThumb.offsetWidth;
+    return w * (Math.abs(x) / maxScrollX) || 0;
+}
+
+function thumbLeftToPianoX(left) {
+    const w = sliderTrack.offsetWidth - sliderThumb.offsetWidth;
+    return -((left / w) * maxScrollX) || 0;
+}
+
+function setPianoX(x) {
+    const clamped = Math.max(-maxScrollX, Math.min(0, x));
+    slider.style.transform = blacks.style.transform = `translateX(${clamped}px)`;
+    sliderThumb.style.left = pianoXToThumbLeft(clamped) + 'px';
+}
+
+function getPianoX() {
+    const t = getComputedStyle(slider).transform;
+    return t === 'none' ? 0 : parseFloat(t.split(',')[4]) || 0;
+}
+
+/* ===== 移除拖动功能，只保留点击功能 ===== */
+function bindKeyEvents() {
+    // 白键点击事件已在渲染时添加
+    // 黑键点击事件已在渲染时添加
+    
+    // 移除原有的拖动相关代码，只保留点击播放功能
+}
+
+/* ===== Slider Control ===== */
+function bindSliderControl() {
+    let dragging = false;
+
+    sliderThumb.addEventListener('mousedown', e => {
+        dragging = true;
+        sliderThumb.style.cursor = 'grabbing';
+        document.body.style.userSelect = 'none';
+    });
+
+    document.addEventListener('mousemove', e => {
+        if (!dragging) return;
+        const rect = sliderTrack.getBoundingClientRect();
+        const left = e.clientX - rect.left - sliderThumb.offsetWidth / 2;
+        const clamped = Math.max(0, Math.min(parseFloat(sliderThumb.style.maxLeft), left));
+        setPianoX(thumbLeftToPianoX(clamped));
+    });
+
+    document.addEventListener('mouseup', () => {
+        dragging = false;
+        sliderThumb.style.cursor = 'grab';
+        document.body.style.userSelect = 'auto';
+    });
+
+    sliderTrack.addEventListener('click', e => {
+        const rect = sliderTrack.getBoundingClientRect();
+        const left = e.clientX - rect.left - sliderThumb.offsetWidth / 2;
+        const clamped = Math.max(0, Math.min(parseFloat(sliderThumb.style.maxLeft), left));
+        setPianoX(thumbLeftToPianoX(clamped));
+    });
+
+    window.addEventListener('resize', () => {
+        calcMaxScroll();
+        setPianoX(getPianoX());
+    });
+}
+
+/* ===== Start ===== */
+const data = buildData();
+const slider = document.getElementById('slider');
+const blacks = document.getElementById('blacks');
+const container = document.getElementById('container');
+
+// 初始化音频
+initAudio();
+
+// 渲染钢琴界面
+renderWhite(data, slider);
+renderBlack(data, blacks);
+calcMaxScroll();
+bindKeyEvents();
+bindSliderControl();
+sliderThumb.style.left = pianoXToThumbLeft(getPianoX()) + 'px';
+</script>
+
+</body>
+</html>

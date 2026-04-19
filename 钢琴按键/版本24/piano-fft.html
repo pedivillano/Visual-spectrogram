@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>钢琴（真实按压 + 可滑动）</title>
+
+<style>
+* {margin:0; padding:0; box-sizing:border-box;}
+body {background:#f5f5f5; padding-bottom:80px;}
+
+.piano-container, .piano-container * {
+    user-select:none;
+    -webkit-user-select:none;
+    -webkit-user-drag:none;
+}
+
+.piano-container {
+    position:relative;
+    height:460px;
+    overflow:hidden;
+    padding:20px;
+}
+
+.piano-slider {
+    position:absolute;
+    top:0;
+    left:0;
+    display:flex;
+    align-items:flex-end;
+    cursor:grab;
+    transition:transform 0.08s ease-out;
+}
+
+/* ===== 白键 ===== */
+.white-key {
+    width:80px;
+    height:360px;
+    background:#fff;
+    border:1px solid #ccc;
+    position:relative;
+}
+.white-key.active { background:#e0e0e0; }
+
+.white-key-info {
+    position:absolute;
+    bottom:-40px;
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:4px;
+}
+
+/* ===== 黑键 ===== */
+.black-keys {
+    position:absolute;
+    top:0;
+    left:0;
+    height:220px;
+    z-index:2;
+}
+
+.black-key {
+    position:absolute;
+    width:48px;
+    height:220px;
+    background:#222;
+    border-radius:0 0 6px 6px;
+    display:flex;
+    justify-content:flex-end;
+    align-items:center;
+    padding-bottom:10px;
+}
+.black-key.active { background:#444; }
+
+/* ===== Slider ===== */
+.slider-control {
+    max-width:1400px;
+    margin:20px auto;
+    padding:0 20px;
+    display:flex;
+    align-items:center;
+    gap:15px;
+}
+.slider-track {
+    flex:1;
+    height:8px;
+    background:#e0e0e0;
+    border-radius:4px;
+    position:relative;
+}
+.slider-thumb {
+    position:absolute;
+    top:50%;
+    transform:translate(-50%,-50%);
+    width:24px;
+    height:24px;
+    background:#3498db;
+    border-radius:50%;
+}
+</style>
+</head>
+
+<body>
+
+<div class="piano-container" id="container">
+    <div class="piano-slider" id="slider"></div>
+    <div class="black-keys" id="blacks"></div>
+</div>
+
+<div class="slider-control">
+    <span>琴键视图滑动</span>
+    <div class="slider-track" id="sliderTrack">
+        <div class="slider-thumb" id="sliderThumb"></div>
+    </div>
+</div>
+
+<script>
+/* ================= Audio ================= */
+
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+const audioCtx = new AudioCtx({ latencyHint:'interactive' });
+const activeNotes = new Map();
+
+function ensureAudio(){
+    if(audioCtx.state==='suspended') audioCtx.resume();
+}
+
+function noteOn(id,freq){
+    if(activeNotes.has(id)) return;
+    ensureAudio();
+    const t=audioCtx.currentTime;
+
+    const osc=audioCtx.createOscillator();
+    const gain=audioCtx.createGain();
+
+    osc.type='triangle';
+    osc.frequency.value=freq;
+
+    gain.gain.setValueAtTime(0,t);
+    gain.gain.linearRampToValueAtTime(0.8,t+0.02);
+
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t);
+
+    activeNotes.set(id,{osc,gain});
+}
+
+function noteOff(id){
+    const n=activeNotes.get(id);
+    if(!n) return;
+    const t=audioCtx.currentTime;
+
+    n.gain.gain.cancelScheduledValues(t);
+    n.gain.gain.setValueAtTime(n.gain.gain.value,t);
+    n.gain.gain.exponentialRampToValueAtTime(0.001,t+0.12);
+    n.osc.stop(t+0.15);
+
+    activeNotes.delete(id);
+}
+
+/* ================= Piano Data ================= */
+
+const NOTES=['A','A#','B','C','C#','D','D#','E','F','F#','G','G#'];
+const BLACK=new Set(['A#','C#','D#','F#','G#']);
+
+const data=[];
+let octave=0;
+for(let i=0;i<88;i++){
+    const n=NOTES[i%12];
+    if(n==='C'&&i) octave++;
+    data.push({
+        id:n+octave,
+        freq:27.5*Math.pow(2,i/12),
+        black:BLACK.has(n)
+    });
+}
+
+/* ================= Render ================= */
+
+const slider=document.getElementById('slider');
+const blacks=document.getElementById('blacks');
+
+let wIndex=-1;
+data.forEach(k=>{
+    if(!k.black){
+        wIndex++;
+        const w=document.createElement('div');
+        w.className='white-key';
+        w.dataset.id=k.id;
+        w.dataset.freq=k.freq;
+        w.innerHTML=`
+            <div class="white-key-info">
+                <div>${k.id}</div>
+                <div>${k.freq.toFixed(2)} Hz</div>
+            </div>`;
+        slider.appendChild(w);
+    }else{
+        const b=document.createElement('div');
+        b.className='black-key';
+        b.style.left=(wIndex*80+80-24)+'px';
+        b.dataset.id=k.id;
+        b.dataset.freq=k.freq;
+        b.innerHTML=`<div>${k.id}<br>${k.freq.toFixed(2)} Hz</div>`;
+        blacks.appendChild(b);
+    }
+});
+
+/* ================= Drag + Play ================= */
+
+let dragging=false,startX=0,startT=0,activeKey=null;
+const TH=6;
+
+function getX(){
+    const t=getComputedStyle(slider).transform;
+    return t==='none'?0:parseFloat(t.split(',')[4])||0;
+}
+function setX(x){
+    slider.style.transform=blacks.style.transform=`translateX(${x}px)`;
+}
+
+function bind(el){
+    el.addEventListener('pointerdown',e=>{
+        const key=e.target.closest('[data-freq]');
+        if(!key) return;
+
+        el.setPointerCapture(e.pointerId);
+
+        dragging=true;
+        startX=e.clientX;
+        startT=getX();
+        activeKey=key;
+
+        key.classList.add('active');
+        noteOn(key.dataset.id,+key.dataset.freq);
+    });
+
+    el.addEventListener('pointermove',e=>{
+        if(!dragging) return;
+        const dx=e.clientX-startX;
+
+        if(activeKey && Math.abs(dx)>TH){
+            noteOff(activeKey.dataset.id);
+            activeKey.classList.remove('active');
+            activeKey=null;
+        }
+        if(!activeKey){
+            setX(startT+dx);
+        }
+    });
+
+    function release(e){
+        if(activeKey){
+            noteOff(activeKey.dataset.id);
+            activeKey.classList.remove('active');
+        }
+        dragging=false;
+        activeKey=null;
+        try{ el.releasePointerCapture(e.pointerId); }catch{}
+    }
+
+    el.addEventListener('pointerup',release);
+    el.addEventListener('pointercancel',release);
+    el.addEventListener('lostpointercapture',release);
+}
+
+bind(slider);
+bind(blacks);
+</script>
+
+</body>
+</html>

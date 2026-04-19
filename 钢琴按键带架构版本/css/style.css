@@ -1,0 +1,100 @@
+body {
+    font-family: Arial, sans-serif;
+    background: #222;
+    color: #fff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+}
+
+.container {
+    text-align: center;
+    width: 80%;
+    max-width: 800px;
+}
+
+.controls, .buttons {
+    margin: 20px 0;
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.info-panel {
+    background: #333;
+    padding: 10px;
+    border-radius: 5px;
+    display: flex;
+    gap: 20px;
+}
+
+button {
+    padding: 10px 20px;
+    cursor: pointer;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+}
+
+button:hover {
+    background: #0056b3;
+}
+
+/* Style for label to look like a button */
+#btnLoad {
+    padding: 10px 20px;
+    cursor: pointer;
+    background: #007bff;
+    color: white;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+#btnLoad:hover {
+    background: #0056b3;
+}
+
+/* Hide file input */
+#fileInput {
+    position: absolute;
+    left: -9999px;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+}
+
+/* Ensure button styling is maintained */
+.buttons {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+}
+
+canvas {
+    width: 100%;
+    height: 300px;
+    background: #000;
+    border: 1px solid #444;
+}
+
+/* Hide file input */
+#fileInput {
+    display: none;
+}
+
+/* Ensure button styling is maintained */
+.buttons {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+}

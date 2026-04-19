@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>钢琴（标准按键名称显示 + 频率显示 + 滑动控制）</title>
+
+<style>
+* {margin:0; padding:0; box-sizing:border-box;}
+body {background:#f5f5f5; padding-bottom:80px;}
+
+.piano-container, .piano-container * {
+    user-select:none;
+    -webkit-user-select:none;
+    -webkit-user-drag:none;
+}
+
+.piano-container {
+    position:relative;
+    height:460px;
+    overflow:hidden;
+    padding:20px;
+    margin-bottom:20px;
+}
+
+.piano-slider {
+    position:absolute;
+    top:0;
+    left:0;
+    display:flex;
+    align-items:flex-end;
+    cursor:grab;
+    transition:transform 0.08s ease-out;
+}
+
+/* ===== 白键 ===== */
+.white-key {
+    width:80px;
+    height:360px;
+    background:#fff;
+    border:1px solid #ccc;
+    position:relative;
+}
+
+.white-key.active { background:#e0e0e0; }
+
+.white-key-info {
+    position:absolute;
+    bottom:-40px;
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:4px;
+}
+
+.note-name { font-size:13px; }
+.note-freq { font-size:11px; color:#666; }
+
+/* ===== 黑键 ===== */
+.black-keys {
+    position:absolute;
+    top:0;
+    left:0;
+    height:220px;
+    z-index:2;
+}
+
+.black-key {
+    position:absolute;
+    top:0;
+    width:48px;
+    height:220px;
+    background:#222;
+    border-radius:0 0 6px 6px;
+    display:flex;
+    justify-content:flex-end;
+    align-items:center;
+    padding-bottom:10px;
+    cursor:pointer;
+}
+
+.black-key.active { background:#444; }
+
+.black-key-info {
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+}
+
+.black-key .note-name { font-size:12px; color:#fff; }
+.black-key .note-freq { font-size:9px; color:#ccc; }
+
+/* ===== 滑块 ===== */
+.slider-control {
+    max-width:1400px;
+    margin:0 auto;
+    padding:0 20px;
+    display:flex;
+    align-items:center;
+    gap:15px;
+}
+
+.slider-track {
+    flex:1;
+    height:8px;
+    background:#e0e0e0;
+    border-radius:4px;
+    position:relative;
+}
+
+.slider-thumb {
+    position:absolute;
+    top:50%;
+    transform:translate(-50%,-50%);
+    width:24px;
+    height:24px;
+    background:#3498db;
+    border-radius:50%;
+    cursor:grab;
+}
+</style>
+</head>
+
+<body>
+
+<div class="piano-container" id="container">
+    <div class="piano-slider" id="slider"></div>
+    <div class="black-keys" id="blacks"></div>
+</div>
+
+<div class="slider-control">
+    <span>琴键视图滑动</span>
+    <div class="slider-track" id="sliderTrack">
+        <div class="slider-thumb" id="sliderThumb"></div>
+    </div>
+</div>
+
+<script>
+/* ================= Audio Engine ================= */
+
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+const audioCtx = new AudioCtx({ latencyHint:'interactive' });
+
+const activeNotes = new Map();
+
+const ADSR = {
+    attack: 0.05,
+    decay: 0.3,
+    sustain: 0.7,
+    release: 0.5,
+    peak: 0.8
+};
+
+function ensureAudio() {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+function playSound(noteId, freq) {
+    if (activeNotes.has(noteId)) return;
+
+    ensureAudio();
+    const now = audioCtx.currentTime;
+
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+
+    osc.type = 'triangle';
+    osc.frequency.value = freq;
+
+    osc.connect(gain).connect(audioCtx.destination);
+
+    const a = ADSR.attack;
+    const d = ADSR.decay;
+
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(ADSR.peak, now + a);
+    gain.gain.exponentialRampToValueAtTime(
+        ADSR.peak * ADSR.sustain,
+        now + a + d
+    );
+
+    osc.start(now);
+
+    activeNotes.set(noteId, { osc, gain, releasing:false });
+}
+
+function stopSound(noteId) {
+    const note = activeNotes.get(noteId);
+    if (!note || note.releasing) return;
+
+    const now = audioCtx.currentTime;
+    const r = ADSR.release;
+
+    note.releasing = true;
+
+    note.gain.gain.cancelScheduledValues(now);
+    note.gain.gain.setValueAtTime(note.gain.gain.value, now);
+    note.gain.gain.exponentialRampToValueAtTime(0.001, now + r);
+
+    note.osc.stop(now + r);
+
+    setTimeout(() => {
+        note.osc.disconnect();
+        note.gain.disconnect();
+        activeNotes.delete(noteId);
+    }, r * 1000 + 50);
+}
+
+/* ================= Piano Data ================= */
+
+const NOTES_ORDER=['A','A#','B','C','C#','D','D#','E','F','F#','G','G#'];
+const BLACK_SET=new Set(['A#','C#','D#','F#','G#']);
+
+function buildData(){
+    const A0=27.5;
+    let octave=0;
+    return Array.from({length:88},(_,i)=>{
+        const note=NOTES_ORDER[i%12];
+        if(note==='C' && i!==0) octave++;
+        return {
+            note, octave,
+            full:note+octave,
+            freq:A0*Math.pow(2,i/12),
+            black:BLACK_SET.has(note)
+        };
+    });
+}
+
+/* ================= Render ================= */
+
+const data = buildData();
+const slider = document.getElementById('slider');
+const blacks = document.getElementById('blacks');
+
+let whiteIndex = -1;
+
+data.forEach(k=>{
+    if(!k.black){
+        whiteIndex++;
+        const w=document.createElement('div');
+        w.className='white-key';
+        w.dataset.id=k.full;
+        w.dataset.freq=k.freq;
+
+        w.innerHTML=`
+            <div class="white-key-info">
+                <div class="note-name">${k.full}</div>
+                <div class="note-freq">${k.freq.toFixed(2)} Hz</div>
+            </div>
+        `;
+        slider.appendChild(w);
+        bindKey(w);
+    } else {
+        const b=document.createElement('div');
+        b.className='black-key';
+        b.style.left=(whiteIndex*80+80-24)+'px';
+        b.dataset.id=k.full;
+        b.dataset.freq=k.freq;
+
+        b.innerHTML=`
+            <div class="black-key-info">
+                <div class="note-name">${k.full}</div>
+                <div class="note-freq">${k.freq.toFixed(2)} Hz</div>
+            </div>
+        `;
+        blacks.appendChild(b);
+        bindKey(b);
+    }
+});
+
+/* ================= Key Events ================= */
+
+function bindKey(el){
+    const id = el.dataset.id;
+    const freq = +el.dataset.freq;
+
+    el.addEventListener('mousedown',e=>{
+        e.preventDefault();
+        el.classList.add('active');
+        playSound(id,freq);
+    });
+
+    el.addEventListener('mouseup',()=>{
+        el.classList.remove('active');
+        stopSound(id);
+    });
+
+    el.addEventListener('mouseleave',e=>{
+        if(e.buttons & 1){
+            el.classList.remove('active');
+            stopSound(id);
+        }
+    });
+}
+
+/* ================= Slider ================= */
+
+let maxScrollX=0;
+const container=document.getElementById('container');
+const track=document.getElementById('sliderTrack');
+const thumb=document.getElementById('sliderThumb');
+
+function calcMax(){
+    maxScrollX=Math.max(0,slider.scrollWidth-container.clientWidth);
+    thumb.max=(track.offsetWidth-thumb.offsetWidth);
+}
+
+function setX(x){
+    x=Math.max(-maxScrollX,Math.min(0,x));
+    slider.style.transform=blacks.style.transform=`translateX(${x}px)`;
+    thumb.style.left=(Math.abs(x)/maxScrollX*thumb.max||0)+'px';
+}
+
+calcMax();
+window.addEventListener('resize',()=>{calcMax();setX(0);});
+</script>
+
+</body>
+</html>

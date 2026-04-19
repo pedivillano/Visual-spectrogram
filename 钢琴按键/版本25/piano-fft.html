@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Web Piano Pro</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#f5f5f5;padding-bottom:60px;}
+
+.piano-container,.piano-container *{
+    user-select:none;
+}
+
+.piano-container{
+    position:relative;
+    height:460px;
+    overflow:hidden;
+    padding:20px;
+}
+
+.piano-slider{
+    position:absolute;
+    display:flex;
+    align-items:flex-end;
+    cursor:grab;
+    transition:transform .08s ease-out;
+}
+
+/* white */
+.white-key{
+    width:80px;height:360px;
+    background:#fff;border:1px solid #ccc;
+    position:relative;
+}
+.white-key.active{background:#e0e0e0;}
+
+.white-key-info{
+    position:absolute;bottom:-40px;width:100%;
+    text-align:center;font-size:12px;
+}
+
+/* black */
+.black-keys{
+    position:absolute;top:20px;left:20px;
+    height:220px;z-index:2;
+}
+.black-key{
+    position:absolute;
+    width:48px;height:220px;
+    background:#222;border-radius:0 0 6px 6px;
+    display:flex;align-items:flex-end;
+    padding-bottom:8px;color:#fff;
+}
+.black-key.active{background:#444;}
+
+.slider-control{
+    max-width:1400px;margin:20px auto;
+    padding:0 20px;display:flex;gap:12px;
+}
+.slider-track{
+    flex:1;height:8px;background:#ddd;
+    border-radius:4px;position:relative;
+}
+.slider-thumb{
+    position:absolute;top:50%;
+    transform:translate(-50%,-50%);
+    width:24px;height:24px;
+    background:#3498db;border-radius:50%;
+}
+</style>
+</head>
+
+<body>
+
+<div class="piano-container" id="container">
+    <div class="piano-slider" id="slider"></div>
+    <div class="black-keys" id="blacks"></div>
+</div>
+
+<div class="slider-control">
+    <span>滑动</span>
+    <div class="slider-track">
+        <div class="slider-thumb"></div>
+    </div>
+</div>
+
+<script>
+/* ================= AUDIO ================= */
+
+const AC = new (window.AudioContext||window.webkitAudioContext)();
+const activeNotes = new Map();
+const pressedNotes = new Set();
+const sustainedNotes = new Set();
+let sustainOn = false;
+
+function noteOn(id,f){
+    if(activeNotes.has(id)) return;
+    if(AC.state==='suspended') AC.resume();
+
+    const t=AC.currentTime;
+    const o=AC.createOscillator();
+    const g=AC.createGain();
+
+    o.type='triangle';
+    o.frequency.value=f;
+
+    g.gain.setValueAtTime(0,t);
+    g.gain.linearRampToValueAtTime(.8,t+.02);
+
+    o.connect(g).connect(AC.destination);
+    o.start();
+
+    activeNotes.set(id,{o,g});
+}
+
+function noteOff(id){
+    if(sustainOn){
+        sustainedNotes.add(id);
+        return;
+    }
+    const n=activeNotes.get(id);
+    if(!n) return;
+    const t=AC.currentTime;
+    n.g.gain.cancelScheduledValues(t);
+    n.g.gain.setValueAtTime(n.g.gain.value,t);
+    n.g.gain.exponentialRampToValueAtTime(.001,t+.12);
+    n.o.stop(t+.15);
+    activeNotes.delete(id);
+}
+
+function releaseSustain(){
+    sustainedNotes.forEach(id=>{
+        if(!pressedNotes.has(id)) noteOff(id);
+    });
+    sustainedNotes.clear();
+}
+
+/* ================= DATA ================= */
+
+const NOTES=['A','A#','B','C','C#','D','D#','E','F','F#','G','G#'];
+const BLACK=new Set(['A#','C#','D#','F#','G#']);
+const keys=[];
+let oct=0;
+for(let i=0;i<88;i++){
+    const n=NOTES[i%12];
+    if(n==='C'&&i) oct++;
+    keys.push({
+        id:n+oct,
+        freq:27.5*Math.pow(2,i/12),
+        black:BLACK.has(n)
+    });
+}
+
+/* ================= RENDER ================= */
+
+const slider=document.getElementById('slider');
+const blacks=document.getElementById('blacks');
+let wi=-1;
+const keyEls={};
+
+keys.forEach(k=>{
+    if(!k.black){
+        wi++;
+        const d=document.createElement('div');
+        d.className='white-key';
+        d.dataset.id=k.id;
+        d.dataset.freq=k.freq;
+        d.innerHTML=`<div class="white-key-info">${k.id}<br>${k.freq.toFixed(1)}Hz</div>`;
+        slider.appendChild(d);
+        keyEls[k.id]=d;
+    }else{
+        const b=document.createElement('div');
+        b.className='black-key';
+        b.style.left=(wi*80+80-24)+'px';
+        b.dataset.id=k.id;
+        b.dataset.freq=k.freq;
+        b.innerHTML=`${k.id}`;
+        blacks.appendChild(b);
+        keyEls[k.id]=b;
+    }
+});
+
+/* ================= POINTER (滑音 + 多指) ================= */
+
+const pointers={};
+const TH=6;
+
+function bind(el){
+    el.addEventListener('pointerdown',e=>{
+        const k=e.target.closest('[data-id]');
+        if(!k) return;
+        el.setPointerCapture(e.pointerId);
+        pointers[e.pointerId]={key:k,startX:e.clientX};
+        pressKey(k);
+    });
+
+    el.addEventListener('pointermove',e=>{
+        const p=pointers[e.pointerId];
+        if(!p) return;
+        const elAt=document.elementFromPoint(e.clientX,e.clientY)?.closest('[data-id]');
+        if(elAt && elAt!==p.key){
+            releaseKey(p.key);
+            p.key=elAt;
+            pressKey(elAt);
+        }
+    });
+
+    function end(e){
+        const p=pointers[e.pointerId];
+        if(p){
+            releaseKey(p.key);
+            delete pointers[e.pointerId];
+        }
+        try{el.releasePointerCapture(e.pointerId);}catch{}
+    }
+
+    el.addEventListener('pointerup',end);
+    el.addEventListener('pointercancel',end);
+}
+
+function pressKey(k){
+    const id=k.dataset.id;
+    pressedNotes.add(id);
+    k.classList.add('active');
+    noteOn(id,+k.dataset.freq);
+}
+function releaseKey(k){
+    const id=k.dataset.id;
+    pressedNotes.delete(id);
+    k.classList.remove('active');
+    noteOff(id);
+}
+
+bind(slider);
+bind(blacks);
+
+/* ================= KEYBOARD ================= */
+
+const map={
+    a:'C4',s:'D4',d:'E4',f:'F4',g:'G4',h:'A4',j:'B4',k:'C5',l:'D5',';':'E5',
+    w:'C#4',e:'D#4',t:'F#4',y:'G#4',u:'A#4',o:'C#5',p:'D#5'
+};
+
+document.addEventListener('keydown',e=>{
+    if(e.code==='Space'){sustainOn=true;return;}
+    const id=map[e.key];
+    if(id && !pressedNotes.has(id)){
+        pressKey(keyEls[id]);
+    }
+});
+
+document.addEventListener('keyup',e=>{
+    if(e.code==='Space'){
+        sustainOn=false;
+        releaseSustain();
+        return;
+    }
+    const id=map[e.key];
+    if(id) releaseKey(keyEls[id]);
+});
+</script>
+
+</body>
+</html>
