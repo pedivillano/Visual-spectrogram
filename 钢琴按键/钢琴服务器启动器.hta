@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>钢琴服务器启动器</title>
+    <hta:application 
+        id="PianoServerLauncher"
+        applicationname="钢琴服务器启动器"
+        border="thin"
+        caption="yes"
+        maximizebutton="no"
+        minimizebutton="no"
+        scroll="no"
+        singleinstance="yes"
+        windowstate="normal"
+    />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 30px;
+            width: 420px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        .header h1 {
+            font-size: 24px;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+        .version-list {
+            margin-bottom: 20px;
+        }
+        .version-list label {
+            display: block;
+            font-size: 14px;
+            color: #555;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        #versionSelect {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            background: white;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+        #versionSelect:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .status {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 12px 16px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        .status-icon {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            margin-right: 10px;
+            background: #28a745;
+        }
+        .status-icon.working {
+            background: #ffc107;
+            animation: pulse 1s infinite;
+        }
+        .status-icon.error {
+            background: #dc3545;
+        }
+        .status-text {
+            color: #333;
+            font-size: 14px;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+        .btn {
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-start {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+        }
+        .btn-start:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(40, 167, 69, 0.4);
+        }
+        .btn-stop {
+            background: linear-gradient(135deg, #dc3545 0%, #fd7e14 100%);
+            color: white;
+        }
+        .btn-stop:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(220, 53, 69, 0.4);
+        }
+        .btn-browser {
+            width: 100%;
+            background: linear-gradient(135deg, #007bff 0%, #6610f2 100%);
+            color: white;
+            margin-bottom: 15px;
+        }
+        .btn-browser:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 123, 255, 0.4);
+        }
+        .log {
+            background: #1a1a2e;
+            color: #00ff88;
+            padding: 12px;
+            border-radius: 8px;
+            font-family: 'Consolas', monospace;
+            font-size: 11px;
+            height: 80px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .log::-webkit-scrollbar {
+            width: 6px;
+        }
+        .log::-webkit-scrollbar-track {
+            background: #2d2d44;
+            border-radius: 3px;
+        }
+        .log::-webkit-scrollbar-thumb {
+            background: #4a4a6a;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎹 钢琴服务器启动器</h1>
+            <p>选择版本并启动服务器</p>
+        </div>
+        
+        <div class="version-list">
+            <label for="versionSelect">选择版本：</label>
+            <select id="versionSelect">
+                <option value="">正在加载版本列表...</option>
+            </select>
+        </div>
+        
+        <div class="status">
+            <div class="status-icon" id="statusIcon"></div>
+            <span class="status-text" id="statusText">就绪</span>
+        </div>
+        
+        <div class="buttons">
+            <button class="btn btn-start" onclick="startServer()">▶ 启动服务器</button>
+            <button class="btn btn-stop" onclick="stopServer()">⏹ 停止服务器</button>
+        </div>
+        
+        <button class="btn btn-browser" onclick="openBrowser()">🌐 打开浏览器</button>
+        
+        <div class="log" id="log">等待操作...</div>
+    </div>
+
+    <script language="VBScript">
+        Sub Window_OnLoad
+            window.resizeTo 460, 500
+            LoadVersions
+        End Sub
+        
+        Sub LoadVersions
+            Dim fso, folder, subFolder, versionSelect
+            Set fso = CreateObject("Scripting.FileSystemObject")
+            Set versionSelect = document.getElementById("versionSelect")
+            versionSelect.innerHTML = ""
+            
+            Dim currentDir
+            currentDir = fso.GetParentFolderName(document.location.pathname)
+            If Left(currentDir, 1) = "/" Then
+                currentDir = Mid(currentDir, 2)
+            End If
+            currentDir = Replace(currentDir, "/", "\")
+            
+            Set folder = fso.GetFolder(currentDir)
+            
+            Dim firstOption
+            Set firstOption = document.createElement("option")
+            firstOption.Value = ""
+            firstOption.Text = "请选择版本"
+            versionSelect.appendChild(firstOption)
+            
+            For Each subFolder In folder.SubFolders
+                folderName = subFolder.Name
+                If Left(folderName, 2) = "版本" Then
+                    Set opt = document.createElement("option")
+                    opt.Value = folderName
+                    opt.Text = folderName
+                    versionSelect.appendChild(opt)
+                End If
+            Next
+            
+            AddLog "版本列表加载完成"
+        End Sub
+        
+        Sub startServer
+            Dim versionSelect, selectedVersion, fso, serverPath, shell
+            
+            Set versionSelect = document.getElementById("versionSelect")
+            selectedVersion = versionSelect.Value
+            
+            If selectedVersion = "" Then
+                MsgBox "请先选择一个版本！", vbExclamation
+                Exit Sub
+            End If
+            
+            Set fso = CreateObject("Scripting.FileSystemObject")
+            Set shell = CreateObject("WScript.Shell")
+            
+            Dim currentDir
+            currentDir = fso.GetParentFolderName(document.location.pathname)
+            If Left(currentDir, 1) = "/" Then
+                currentDir = Mid(currentDir, 2)
+            End If
+            currentDir = Replace(currentDir, "/", "\")
+            
+            serverPath = currentDir & "\" & selectedVersion & "\server"
+            
+            If Not fso.FolderExists(serverPath) Then
+                MsgBox "版本目录不存在！", vbExclamation
+                Exit Sub
+            End If
+            
+            SetStatus "working", "正在停止现有服务器..."
+            AddLog "停止现有服务器进程"
+            shell.Run "taskkill /F /IM node.exe", 0, True
+            
+            SetStatus "working", "正在启动服务器..."
+            AddLog "启动版本: " & selectedVersion
+            
+            shell.CurrentDirectory = serverPath
+            shell.Run "cmd /c npm start", 1, False
+            
+            AddLog "服务器进程已启动"
+            
+            SetStatus "working", "正在打开浏览器..."
+            WScript.Sleep 3000
+            
+            shell.Run "http://localhost:3000", 1
+            AddLog "浏览器已打开"
+            
+            SetStatus "success", "服务器运行中"
+            MsgBox "版本 " & selectedVersion & " 服务器启动成功！", vbInformation
+        End Sub
+        
+        Sub stopServer
+            Dim shell
+            Set shell = CreateObject("WScript.Shell")
+            
+            SetStatus "working", "正在停止服务器..."
+            AddLog "停止所有服务器进程"
+            
+            shell.Run "taskkill /F /IM node.exe", 0, True
+            
+            SetStatus "error", "服务器已停止"
+            AddLog "服务器已停止"
+        End Sub
+        
+        Sub openBrowser
+            Dim shell
+            Set shell = CreateObject("WScript.Shell")
+            shell.Run "http://localhost:3000", 1
+            AddLog "已打开浏览器"
+        End Sub
+        
+        Sub SetStatus(status, text)
+            Dim statusIcon, statusText
+            Set statusIcon = document.getElementById("statusIcon")
+            Set statusText = document.getElementById("statusText")
+            
+            statusIcon.className = "status-icon"
+            If status = "working" Then
+                statusIcon.className = statusIcon.className & " working"
+            ElseIf status = "error" Then
+                statusIcon.className = statusIcon.className & " error"
+            End If
+            
+            statusText.innerHTML = text
+        End Sub
+        
+        Sub AddLog(text)
+            Dim log
+            Set log = document.getElementById("log")
+            Dim now
+            now = Now()
+            log.innerHTML = log.innerHTML & vbCrLf & "[" & FormatDateTime(now, vbShortTime) & "] " & text
+            log.scrollTop = log.scrollHeight
+        End Sub
+    </script>
+</body>
+</html>

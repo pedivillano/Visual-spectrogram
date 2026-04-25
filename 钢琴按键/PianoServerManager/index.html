@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>钢琴服务器管理器</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Microsoft YaHei', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .container {
+      background: white;
+      border-radius: 16px;
+      padding: 30px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      width: 450px;
+    }
+    .header { text-align: center; margin-bottom: 25px; }
+    .header h1 { font-size: 24px; color: #333; margin-bottom: 8px; }
+    .header p { color: #666; font-size: 14px; }
+    
+    select {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 14px;
+      margin-bottom: 20px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    select:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    
+    .status {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .status-icon {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      margin-right: 10px;
+      background: #28a745;
+    }
+    .status-icon.working { 
+      background: #ffc107; 
+      animation: pulse 1s infinite; 
+    }
+    .status-icon.error { background: #dc3545; }
+    @keyframes pulse { 
+      0%, 100% { opacity: 1; } 
+      50% { opacity: 0.5; } 
+    }
+    .status-text { color: #333; font-size: 14px; }
+    
+    .buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 15px;
+    }
+    .btn {
+      padding: 14px;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .btn-start {
+      background: linear-gradient(135deg, #28a745, #20c997);
+      color: white;
+    }
+    .btn-start:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(40,167,69,0.4); }
+    .btn-stop {
+      background: linear-gradient(135deg, #dc3545, #fd7e14);
+      color: white;
+    }
+    .btn-stop:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(220,53,69,0.4); }
+    .btn-browser {
+      width: 100%;
+      background: linear-gradient(135deg, #007bff, #6610f2);
+      color: white;
+      margin-bottom: 15px;
+    }
+    .btn-browser:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(0,123,255,0.4); }
+    
+    .log {
+      background: #1a1a2e;
+      color: #00ff88;
+      padding: 12px;
+      border-radius: 8px;
+      font-family: 'Consolas', monospace;
+      font-size: 11px;
+      height: 80px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    .log::-webkit-scrollbar { width: 6px; }
+    .log::-webkit-scrollbar-track { background: #2d2d44; border-radius: 3px; }
+    .log::-webkit-scrollbar-thumb { background: #4a4a6a; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎹 钢琴服务器管理器</h1>
+      <p>选择版本并启动服务器</p>
+    </div>
+    
+    <select id="versionSelect"></select>
+    
+    <div class="status">
+      <div class="status-icon" id="statusIcon"></div>
+      <span class="status-text" id="statusText">就绪</span>
+    </div>
+    
+    <div class="buttons">
+      <button class="btn btn-start" onclick="startServer()">▶ 启动服务器</button>
+      <button class="btn btn-stop" onclick="stopServer()">⏹ 停止服务器</button>
+    </div>
+    
+    <button class="btn btn-browser" onclick="openBrowser()">🌐 打开浏览器</button>
+    
+    <div class="log" id="log">等待操作...</div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

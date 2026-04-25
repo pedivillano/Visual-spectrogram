@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>键盘映射钢琴 - 自动演奏版 v32</title>
+<!-- 
+版本日志 - 版本32
+
+改进内容：
+1. ✅ 使用数字表示音符 + 符号表示音区（最直观）
+   - `1 2 3` - 中音区（默认）
+   - `^1 ^2 ^3` - 高音区（^表示高音）
+   - `v1 v2 v3` - 低音区（v表示低音）
+   - `^^1 ^^2 ^^3` - 倍高音区
+   - `vv1 vv2 vv3` - 倍低音区
+   
+2. ✅ 兼容其他格式：字母音名（C4 D4）、纯数字
+
+3. ✅ 音符连接在一起也可区分（如 ^1^2^3 会被解析为三个独立音符）
+ -->
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+body {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    font-family: 'Arial', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    padding: 20px;
+}
+
+.container {
+    max-width: 1200px;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border-radius: 20px;
+    padding: 30px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+h1 {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+    background: linear-gradient(45deg, #ff6b6b, #feca57);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.subtitle {
+    font-size: 1.1rem;
+    opacity: 0.8;
+    margin-bottom: 20px;
+}
+
+.piano-container {
+    position: relative;
+    height: 300px;
+    margin-bottom: 30px;
+    background: #2d3436;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+.white-keys {
+    display: flex;
+    height: 200px;
+    position: relative;
+}
+
+.white-key {
+    flex: 1;
+    background: linear-gradient(to bottom, #fff 0%, #f8f9fa 100%);
+    border: 1px solid #ddd;
+    border-radius: 0 0 8px 8px;
+    margin: 0 2px;
+    position: relative;
+    cursor: pointer;
+    transition: all 0.1s ease;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+.white-key.active {
+    background: linear-gradient(to bottom, #ffeb3b 0%, #fbc02d 100%);
+    transform: translateY(5px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+.black-keys {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 120px;
+    pointer-events: none;
+}
+
+.black-key {
+    position: absolute;
+    width: 6%;
+    height: 120px;
+    background: linear-gradient(to bottom, #333 0%, #000 100%);
+    border-radius: 0 0 5px 5px;
+    z-index: 2;
+    cursor: pointer;
+    transition: all 0.1s ease;
+    pointer-events: auto;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+}
+
+.black-key.active {
+    background: linear-gradient(to bottom, #ff6b6b 0%, #c23616 100%);
+    transform: translateY(3px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+}
+
+.key-label {
+    position: absolute;
+    bottom: 10px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 0.9rem;
+    font-weight: bold;
+    color: #2d3436;
+}
+
+.black-key .key-label {
+    color: #fff;
+    bottom: 8px;
+    font-size: 0.7rem;
+}
+
+.notation-input-section {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.notation-input-section h3 {
+    color: #feca57;
+    margin-bottom: 15px;
+    font-size: 1.2rem;
+}
+
+.notation-textarea {
+    width: 100%;
+    height: 150px;
+    padding: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 1rem;
+    resize: vertical;
+    margin-bottom: 15px;
+    font-family: 'Arial', sans-serif;
+}
+
+.notation-textarea::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.btn {
+    padding: 10px 25px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-confirm {
+    background: linear-gradient(45deg, #2ecc71, #27ae60);
+    color: #fff;
+}
+
+.btn-confirm:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(46, 204, 113, 0.4);
+}
+
+.btn-clear {
+    background: linear-gradient(45deg, #e74c3c, #c0392b);
+    color: #fff;
+}
+
+.btn-clear:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(231, 76, 60, 0.4);
+}
+
+.btn-save {
+    background: linear-gradient(45deg, #3498db, #2980b9);
+    color: #fff;
+}
+
+.btn-save:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4);
+}
+
+.btn-load {
+    background: linear-gradient(45deg, #9b59b6, #8e44ad);
+    color: #fff;
+}
+
+.btn-load:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(155, 89, 182, 0.4);
+}
+
+.btn-play {
+    background: linear-gradient(45deg, #f39c12, #e67e22);
+    color: #fff;
+}
+
+.btn-play:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(243, 156, 18, 0.4);
+}
+
+.btn-stop {
+    background: linear-gradient(45deg, #7f8c8d, #95a5a6);
+    color: #fff;
+}
+
+.btn-stop:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(127, 140, 141, 0.4);
+}
+
+.playback-section {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-top: 15px;
+}
+
+.speed-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #feca57;
+}
+
+.speed-control input {
+    width: 150px;
+}
+
+.song-list-section {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 20px;
+    margin-top: 20px;
+}
+
+.song-list-section h3 {
+    color: #feca57;
+    margin-bottom: 15px;
+    font-size: 1.2rem;
+}
+
+.song-list {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.song-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.song-item:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.song-item button {
+    padding: 5px 10px;
+    background: rgba(231, 76, 60, 0.8);
+    border: none;
+    border-radius: 4px;
+    color: #fff;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+.song-item button:hover {
+    background: #e74c3c;
+}
+
+.keyboard-mapping {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 20px;
+    margin-top: 20px;
+}
+
+.mapping-section {
+    margin-bottom: 25px;
+}
+
+.mapping-section h3 {
+    color: #feca57;
+    margin-bottom: 15px;
+    font-size: 1.2rem;
+}
+
+.key-group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.key-item {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 8px 15px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    min-width: 60px;
+    text-align: center;
+}
+
+.piano-key {
+    font-weight: bold;
+    color: #ff6b6b;
+}
+
+.computer-key {
+    font-weight: bold;
+    color: #feca57;
+    background: rgba(254, 202, 87, 0.1);
+    border-radius: 4px;
+    padding: 2px 6px;
+    margin: 0 2px;
+}
+
+.instructions {
+    text-align: center;
+    margin-top: 20px;
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+
+.octave-indicator {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 0.8rem;
+}
+
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-overlay.show {
+    display: flex;
+}
+
+.modal {
+    background: #2d3436;
+    padding: 30px;
+    border-radius: 15px;
+    width: 90%;
+    max-width: 400px;
+}
+
+.modal h3 {
+    color: #feca57;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.modal input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 1rem;
+    margin-bottom: 20px;
+}
+
+.modal-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.modal-btn {
+    padding: 10px 30px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.modal-btn-confirm {
+    background: linear-gradient(45deg, #2ecc71, #27ae60);
+    color: #fff;
+}
+
+.modal-btn-cancel {
+    background: linear-gradient(45deg, #7f8c8d, #95a5a6);
+    color: #fff;
+}
+
+.status-message {
+    margin-top: 15px;
+    padding: 10px 15px;
+    border-radius: 8px;
+    text-align: center;
+    display: none;
+}
+
+.status-message.success {
+    background: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+    display: block;
+}
+
+.status-message.error {
+    background: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+    display: block;
+}
+
+.syntax-help {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+    font-size: 0.9rem;
+}
+
+.syntax-help h4 {
+    color: #feca57;
+    margin-bottom: 10px;
+}
+
+.syntax-help code {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #ff6b6b;
+}
+
+.syntax-help .example {
+    margin-left: 20px;
+    color: #a29bfe;
+}
+
+@media (max-width: 768px) {
+    .container {
+        padding: 15px;
+    }
+    
+    h1 {
+        font-size: 2rem;
+    }
+    
+    .piano-container {
+        height: 250px;
+    }
+    
+    .white-keys {
+        height: 150px;
+    }
+    
+    .black-keys {
+        height: 90px;
+    }
+    
+    .black-key {
+        height: 90px;
+    }
+    
+    .button-group {
+        flex-direction: column;
+    }
+    
+    .btn {
+        width: 100%;
+    }
+}
+</style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎹 键盘映射钢琴 - 自动演奏版 v32</h1>
+            <p class="subtitle">数字音符 + ^v 符号表示音区</p>
+        </div>
+        
+        <div class="piano-container">
+            <div class="octave-indicator">C3-C7</div>
+            <div class="white-keys" id="whiteKeys"></div>
+            <div class="black-keys" id="blackKeys"></div>
+        </div>
+        
+        <div class="notation-input-section">
+            <h3>📝 简谱输入</h3>
+            
+            <div class="syntax-help">
+                <h4>🎵 推荐格式：数字 + 符号表示音区</h4>
+                
+                <p><code>1 2 3</code> - 中音区（默认，第四音区）</p>
+                <p><code>^1 ^2 ^3</code> - 高音区（^表示高音，第五音区）</p>
+                <p><code>v1 v2 v3</code> - 低音区（v表示低音，第三音区）</p>
+                <p><code>^^1 ^^2 ^^3</code> - 倍高音区（第六音区）</p>
+                <p><code>vv1 vv2 vv3</code> - 倍低音区（第二音区）</p>
+                <p class="example">示例：1 3 5 ^1</p>
+                
+                <p style="margin-top: 15px;"><strong>其他支持格式：</strong></p>
+                <p><code>C4 D4 E4</code> - 字母音名格式</p>
+                <p><code>1 2 3 4 5 6 7</code> - 纯数字格式（默认中音区）</p>
+            </div>
+            
+            <textarea 
+                id="notationInput" 
+                class="notation-textarea" 
+                placeholder="请输入简谱，每行一个声部：&#10;&#10;推荐格式（数字+符号）：&#10;1 3 5 ^1&#10;2 4 6 ^2&#10;&#10;字母音名格式：&#10;C4 E4 G4 C5&#10;&#10;纯数字格式：&#10;1 3 5 1"></textarea>
+            
+            <div class="button-group">
+                <button id="btnConfirm" class="btn btn-confirm">确认解析</button>
+                <button id="btnClear" class="btn btn-clear">清空</button>
+                <button id="btnSave" class="btn btn-save">保存</button>
+                <button id="btnLoad" class="btn btn-load">加载</button>
+            </div>
+            
+            <div class="playback-section">
+                <button id="btnPlay" class="btn btn-play">▶ 播放</button>
+                <button id="btnStop" class="btn btn-stop">⏹ 停止</button>
+                <div class="speed-control">
+                    <label>速度:</label>
+                    <input type="range" id="speedSlider" min="200" max="1000" value="500" step="50">
+                    <span id="speedValue">500ms</span>
+                </div>
+            </div>
+            
+            <div id="statusMessage" class="status-message"></div>
+        </div>
+        
+        <div class="song-list-section" id="songListSection" style="display: none;">
+            <h3>📁 已保存的谱子</h3>
+            <div id="songList" class="song-list"></div>
+        </div>
+        
+        <div class="keyboard-mapping">
+            <div class="mapping-section">
+                <h3>🎵 键盘映射指南</h3>
+                <div class="key-group">
+                    <div class="key-item">
+                        <span class="piano-key">C3音域</span> → 
+                        <span class="computer-key">Z</span>-<span class="computer-key">N</span>
+                    </div>
+                    <div class="key-item">
+                        <span class="piano-key">C4音域</span> → 
+                        <span class="computer-key">A</span>-<span class="computer-key">J</span>
+                    </div>
+                    <div class="key-item">
+                        <span class="piano-key">C6音域</span> → 
+                        <span class="computer-key">Q</span>-<span class="computer-key">U</span>
+                    </div>
+                    <div class="key-item">
+                        <span class="piano-key">C7音域</span> → 
+                        <span class="computer-key">1</span>-<span class="computer-key">7</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <p class="instructions">💡 提示：按下对应的电脑键盘按键即可弹奏钢琴，支持同时按下多个键</p>
+    </div>
+    
+    <div id="saveModal" class="modal-overlay">
+        <div class="modal">
+            <h3>保存谱子</h3>
+            <input type="text" id="fileNameInput" placeholder="请输入文件名">
+            <div class="modal-buttons">
+                <button id="modalConfirm" class="modal-btn modal-btn-confirm">确认保存</button>
+                <button id="modalCancel" class="modal-btn modal-btn-cancel">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/autoPlay.js"></script>
+    <script>
+        let audioContext = null;
+        let autoPlay = null;
+        let parsedNotes = [];
+        let keyboardEnabled = true;
+        
+        function getAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+            return audioContext;
+        }
+
+        function initAutoPlay() {
+            if (!autoPlay) {
+                autoPlay = new AutoPlay(getAudioContext());
+            }
+            return autoPlay;
+        }
+
+        function getPianoFrequency(note, octave) {
+            const A4 = 440;
+            const notes = {
+                'C': -9, 'C#': -8, 'D': -7, 'D#': -6, 'E': -5,
+                'F': -4, 'F#': -3, 'G': -2, 'G#': -1, 'A': 0, 'A#': 1, 'B': 2
+            };
+            
+            const semitonesFromA4 = (octave - 4) * 12 + notes[note];
+            return A4 * Math.pow(2, semitonesFromA4 / 12);
+        }
+
+        function playNote(frequency, noteName) {
+            const ctx = getAudioContext();
+            const now = ctx.currentTime;
+            
+            const oscillator = ctx.createOscillator();
+            const gainNode = ctx.createGain();
+            const filter = ctx.createBiquadFilter();
+            
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(frequency, now);
+            
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(2000, now);
+            
+            gainNode.gain.setValueAtTime(0, now);
+            gainNode.gain.linearRampToValueAtTime(0.8, now + 0.02);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+            
+            oscillator.connect(filter);
+            filter.connect(gainNode);
+            gainNode.connect(ctx.destination);
+            
+            oscillator.start(now);
+            oscillator.stop(now + 1.5);
+        }
+
+        const pianoConfig = {
+            C3: { startNote: 'C', startOctave: 3, whiteKeys: 7, computerKeys: ['Z', 'X', 'C', 'V', 'B', 'N', 'M'], position: 0 },
+            C4: { startNote: 'C', startOctave: 4, whiteKeys: 7, computerKeys: ['A', 'S', 'D', 'F', 'G', 'H', 'J'], position: 7 },
+            C6: { startNote: 'C', startOctave: 6, whiteKeys: 7, computerKeys: ['Q', 'W', 'E', 'R', 'T', 'Y', 'U'], position: 14 },
+            C7: { startNote: 'C', startOctave: 7, whiteKeys: 7, computerKeys: ['1', '2', '3', '4', '5', '6', '7'], position: 21 }
+        };
+
+        function createKeyboardMapping() {
+            const mapping = {};
+            const noteDetails = {};
+            
+            Object.keys(pianoConfig).forEach(octaveKey => {
+                const config = pianoConfig[octaveKey];
+                const notes = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+                
+                notes.forEach((note, index) => {
+                    if (index < config.whiteKeys) {
+                        const computerKey = config.computerKeys[index];
+                        const fullNote = note + config.startOctave;
+                        const frequency = getPianoFrequency(note, config.startOctave);
+                        
+                        mapping[computerKey.toLowerCase()] = {
+                            type: 'white', note: fullNote, frequency: frequency, position: config.position + index
+                        };
+                        
+                        noteDetails[fullNote] = {
+                            computerKey: computerKey, frequency: frequency, position: config.position + index
+                        };
+                    }
+                });
+            });
+            
+            return { mapping, noteDetails };
+        }
+
+        const { mapping, noteDetails } = createKeyboardMapping();
+
+        function renderPiano() {
+            const whiteKeysContainer = document.getElementById('whiteKeys');
+            const blackKeysContainer = document.getElementById('blackKeys');
+            
+            whiteKeysContainer.innerHTML = '';
+            blackKeysContainer.innerHTML = '';
+            
+            Object.keys(noteDetails).sort((a, b) => noteDetails[a].position - noteDetails[b].position).forEach(note => {
+                const detail = noteDetails[note];
+                const whiteKey = document.createElement('div');
+                whiteKey.className = 'white-key';
+                whiteKey.dataset.note = note;
+                whiteKey.dataset.key = detail.computerKey.toLowerCase();
+                
+                const label = document.createElement('div');
+                label.className = 'key-label';
+                label.innerHTML = `${note}<br><small>${detail.computerKey}</small>`;
+                
+                whiteKey.appendChild(label);
+                whiteKeysContainer.appendChild(whiteKey);
+            });
+            
+            const blackNotes = [
+                { note: 'C#3', position: 0.7 }, { note: 'D#3', position: 1.7 },
+                { note: 'F#3', position: 3.7 }, { note: 'G#3', position: 4.7 }, { note: 'A#3', position: 5.7 },
+                { note: 'C#4', position: 7.7 }, { note: 'D#4', position: 8.7 },
+                { note: 'F#4', position: 10.7 }, { note: 'G#4', position: 11.7 }, { note: 'A#4', position: 12.7 },
+                { note: 'C#6', position: 14.7 }, { note: 'D#6', position: 15.7 },
+                { note: 'F#6', position: 17.7 }, { note: 'G#6', position: 18.7 }, { note: 'A#6', position: 19.7 },
+                { note: 'C#7', position: 21.7 }, { note: 'D#7', position: 22.7 },
+                { note: 'F#7', position: 24.7 }, { note: 'G#7', position: 25.7 }, { note: 'A#7', position: 26.7 }
+            ];
+            
+            blackNotes.forEach(blackNote => {
+                const blackKey = document.createElement('div');
+                blackKey.className = 'black-key';
+                blackKey.dataset.note = blackNote.note;
+                
+                const noteParts = blackNote.note.match(/([A-Z]#?)(\d)/);
+                if (noteParts) {
+                    const frequency = getPianoFrequency(noteParts[1], parseInt(noteParts[2]));
+                    blackKey.dataset.frequency = frequency;
+                    
+                    const label = document.createElement('div');
+                    label.className = 'key-label';
+                    label.textContent = blackNote.note;
+                    blackKey.appendChild(label);
+                    
+                    blackKey.style.left = `calc(${(blackNote.position / 28) * 100}% - 3%)`;
+                    blackKeysContainer.appendChild(blackKey);
+                }
+            });
+        }
+
+        function setupKeyboardListeners() {
+            const activeKeys = new Set();
+            const activeTouchKeys = new Map();
+            const pianoContainer = document.querySelector('.piano-container');
+            
+            document.addEventListener('keydown', (event) => {
+                if (!keyboardEnabled) return;
+                
+                const key = event.key.toLowerCase();
+                if (activeKeys.has(key) || !mapping[key]) return;
+                
+                event.preventDefault();
+                activeKeys.add(key);
+                
+                const keyInfo = mapping[key];
+                const keyElement = document.querySelector(`[data-key="${key}"]`);
+                
+                if (keyElement) {
+                    keyElement.classList.add('active');
+                    playNote(keyInfo.frequency, keyInfo.note);
+                }
+            });
+            
+            document.addEventListener('keyup', (event) => {
+                const key = event.key.toLowerCase();
+                if (mapping[key]) {
+                    activeKeys.delete(key);
+                    const keyElement = document.querySelector(`[data-key="${key}"]`);
+                    if (keyElement) keyElement.classList.remove('active');
+                }
+            });
+
+            function isPointInsidePiano(clientX, clientY) {
+                if (!pianoContainer) return false;
+                const rect = pianoContainer.getBoundingClientRect();
+                return clientX >= rect.left && clientX <= rect.right &&
+                       clientY >= rect.top && clientY <= rect.bottom;
+            }
+            
+            document.addEventListener('mousedown', (event) => {
+                const keyElement = event.target.closest('.white-key, .black-key');
+                if (keyElement) {
+                    const note = keyElement.dataset.note;
+                    if (note) {
+                        keyElement.classList.add('active');
+                        const noteParts = note.match(/([A-Z]#?)(\d)/);
+                        if (noteParts) {
+                            const frequency = keyElement.dataset.frequency || getPianoFrequency(noteParts[1], parseInt(noteParts[2]));
+                            playNote(frequency, note);
+                        }
+                    }
+                }
+            });
+            
+            document.addEventListener('mouseup', (event) => {
+                document.querySelectorAll('.white-key.active, .black-key.active').forEach(key => key.classList.remove('active'));
+            });
+
+            document.addEventListener('mousemove', (event) => {
+                if (!isPointInsidePiano(event.clientX, event.clientY)) {
+                    document.querySelectorAll('.white-key.active, .black-key.active').forEach(key => key.classList.remove('active'));
+                }
+            });
+            
+            document.addEventListener('touchstart', (event) => {
+                event.preventDefault();
+                Array.from(event.touches).forEach(touch => {
+                    const keyElement = document.elementFromPoint(touch.clientX, touch.clientY);
+                    const pianoKey = keyElement?.closest('.white-key, .black-key');
+                    
+                    if (pianoKey) {
+                        const note = pianoKey.dataset.note;
+                        if (note) {
+                            pianoKey.classList.add('active');
+                            activeTouchKeys.set(touch.identifier, pianoKey);
+                            
+                            const noteParts = note.match(/([A-Z]#?)(\d)/);
+                            if (noteParts) {
+                                const frequency = pianoKey.dataset.frequency || getPianoFrequency(noteParts[1], parseInt(noteParts[2]));
+                                playNote(frequency, note);
+                            }
+                        }
+                    }
+                });
+            }, { passive: false });
+            
+            document.addEventListener('touchmove', (event) => {
+                activeTouchKeys.forEach((keyElement, touchId) => {
+                    const touch = Array.from(event.touches).find(t => t.identifier === touchId);
+                    if (!touch || !isPointInsidePiano(touch.clientX, touch.clientY)) {
+                        keyElement.classList.remove('active');
+                        activeTouchKeys.delete(touchId);
+                    }
+                });
+            });
+            
+            document.addEventListener('touchend', (event) => {
+                activeTouchKeys.forEach((keyElement, touchId) => {
+                    const touchExists = Array.from(event.touches).some(t => t.identifier === touchId);
+                    if (!touchExists) {
+                        keyElement.classList.remove('active');
+                        activeTouchKeys.delete(touchId);
+                    }
+                });
+            });
+        }
+
+        function showStatusMessage(message, isSuccess = true) {
+            const statusElement = document.getElementById('statusMessage');
+            statusElement.textContent = message;
+            statusElement.className = `status-message ${isSuccess ? 'success' : 'error'}`;
+            setTimeout(() => {
+                statusElement.style.display = 'none';
+            }, 3000);
+        }
+
+        async function confirmNotation() {
+            const input = document.getElementById('notationInput').value;
+            if (!input.trim()) {
+                showStatusMessage('请输入简谱内容', false);
+                return;
+            }
+            
+            const player = initAutoPlay();
+            parsedNotes = player.parseChineseNotation(input);
+            
+            if (parsedNotes.length === 0) {
+                showStatusMessage('未解析到有效音符', false);
+                return;
+            }
+            
+            showStatusMessage(`成功解析 ${parsedNotes.length} 个音符`, true);
+        }
+
+        function clearNotation() {
+            document.getElementById('notationInput').value = '';
+            parsedNotes = [];
+            showStatusMessage('已清空', true);
+        }
+
+        function openSaveModal() {
+            document.getElementById('saveModal').classList.add('show');
+            document.getElementById('fileNameInput').value = '';
+            keyboardEnabled = false;
+        }
+
+        function closeSaveModal() {
+            document.getElementById('saveModal').classList.remove('show');
+            keyboardEnabled = true;
+        }
+
+        async function saveSong() {
+            const fileName = document.getElementById('fileNameInput').value.trim();
+            const content = document.getElementById('notationInput').value;
+            
+            if (!fileName) {
+                showStatusMessage('请输入文件名', false);
+                return;
+            }
+            
+            if (!content.trim()) {
+                showStatusMessage('请先输入简谱内容', false);
+                return;
+            }
+            
+            const player = initAutoPlay();
+            const result = await player.saveSong(fileName, content);
+            
+            if (result.success) {
+                showStatusMessage('保存成功', true);
+                closeSaveModal();
+                await loadSongList();
+            } else {
+                showStatusMessage(result.message, false);
+            }
+        }
+
+        async function loadSongList() {
+            const player = initAutoPlay();
+            const result = await player.listSongs();
+            
+            if (result.success) {
+                const songListElement = document.getElementById('songList');
+                const songListSection = document.getElementById('songListSection');
+                
+                if (result.data.length === 0) {
+                    songListSection.style.display = 'none';
+                    return;
+                }
+                
+                songListSection.style.display = 'block';
+                songListElement.innerHTML = '';
+                
+                result.data.forEach(song => {
+                    const songItem = document.createElement('div');
+                    songItem.className = 'song-item';
+                    songItem.innerHTML = `
+                        <span>${song.name}</span>
+                        <button onclick="deleteSong('${song.name}')">删除</button>
+                    `;
+                    songItem.addEventListener('click', (e) => {
+                        if (e.target.tagName !== 'BUTTON') {
+                            loadSongContent(song.name);
+                        }
+                    });
+                    songListElement.appendChild(songItem);
+                });
+            }
+        }
+
+        async function loadSongContent(fileName) {
+            const player = initAutoPlay();
+            const result = await player.loadSong(fileName);
+            
+            if (result.success) {
+                document.getElementById('notationInput').value = result.content;
+                showStatusMessage(`已加载 "${fileName}"`, true);
+            } else {
+                showStatusMessage(result.message, false);
+            }
+        }
+
+        async function deleteSong(fileName) {
+            if (!confirm(`确定要删除 "${fileName}" 吗？`)) return;
+            
+            const player = initAutoPlay();
+            const result = await player.deleteSong(fileName);
+            
+            if (result.success) {
+                showStatusMessage('删除成功', true);
+                await loadSongList();
+            } else {
+                showStatusMessage(result.message, false);
+            }
+        }
+
+        async function playNotation() {
+            if (parsedNotes.length === 0) {
+                const input = document.getElementById('notationInput').value;
+                if (!input.trim()) {
+                    showStatusMessage('请先输入并确认简谱', false);
+                    return;
+                }
+                
+                const player = initAutoPlay();
+                parsedNotes = player.parseChineseNotation(input);
+                
+                if (parsedNotes.length === 0) {
+                    showStatusMessage('未解析到有效音符', false);
+                    return;
+                }
+            }
+            
+            const speed = parseInt(document.getElementById('speedSlider').value);
+            const player = initAutoPlay();
+            
+            showStatusMessage('正在播放...', true);
+            
+            await player.play(parsedNotes, (note, index) => {
+                const keyElement = document.querySelector(`[data-note="${note.note}${note.octave}"]`);
+                if (keyElement) {
+                    keyElement.classList.add('active');
+                    setTimeout(() => {
+                        keyElement.classList.remove('active');
+                    }, speed * 0.8);
+                }
+            }, speed);
+            
+            showStatusMessage('播放完成', true);
+        }
+
+        async function stopPlayback() {
+            const player = initAutoPlay();
+            await player.stop();
+            document.querySelectorAll('.white-key.active, .black-key.active').forEach(key => key.classList.remove('active'));
+            showStatusMessage('已停止', true);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderPiano();
+            setupKeyboardListeners();
+            loadSongList();
+            
+            document.body.addEventListener('click', () => {
+                getAudioContext();
+            }, { once: true });
+            
+            document.getElementById('btnConfirm').addEventListener('click', () => {
+                confirmNotation();
+                keyboardEnabled = true;
+            });
+            document.getElementById('btnClear').addEventListener('click', clearNotation);
+            document.getElementById('btnSave').addEventListener('click', openSaveModal);
+            document.getElementById('btnLoad').addEventListener('click', loadSongList);
+            document.getElementById('btnPlay').addEventListener('click', playNotation);
+            document.getElementById('btnStop').addEventListener('click', stopPlayback);
+            
+            document.getElementById('modalConfirm').addEventListener('click', saveSong);
+            document.getElementById('modalCancel').addEventListener('click', closeSaveModal);
+            
+            document.getElementById('speedSlider').addEventListener('input', (e) => {
+                document.getElementById('speedValue').textContent = `${e.target.value}ms`;
+            });
+            
+            const notationInput = document.getElementById('notationInput');
+            notationInput.addEventListener('focus', () => {
+                keyboardEnabled = false;
+            });
+            notationInput.addEventListener('blur', () => {
+                keyboardEnabled = true;
+            });
+        });
+
+        window.deleteSong = deleteSong;
+    </script>
+</body>
+</html>
