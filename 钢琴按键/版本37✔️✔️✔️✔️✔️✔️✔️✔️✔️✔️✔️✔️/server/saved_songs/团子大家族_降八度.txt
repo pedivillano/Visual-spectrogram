@@ -1,0 +1,62 @@
+【团子大家族】
+调号：1=♯C
+拍号：4/4
+速度：100
+
+// 格式说明：
+// 1 2 3   - 中音区（默认，第四音区）
+// ^1 ^2 ^3 - 高音区（^表示高音，第五音区）
+// v1 v2 v3 - 低音区（v表示低音，第三音区）
+// 0 - 休止符
+// - - 延长音
+// b - 降音（如 b5 表示降5）
+
+// ===== 前奏（整体降低一个八度）=====
+v3 v2 v5 v5 v6 | v6 v7 v5 v2 | v3 v2 v5 v5 v6 | v6 v7 v7 v5 0 |
+v3 v2 v5 v5 v6 | v6 v7 v5 v2 | v3 v2 v5 v5 v6 | v5 0 0 0 |
+
+v3 v2 v5 v5 v6 | v6 v7 v5 v2 | v3 v2 v5 v5 v6 | v6 v7 v6 0 |
+v3 v2 v5 v5 v6 | v6 v7 v5 v2 | v3 v2 v5 v5 v6 | v5 0 0 0 |
+
+v3 v2 v5 v5 v6 | v6 v7 v6 0 | v3 v2 v5 v5 v6 | v6 v7 v5 v2 |
+v3 v2 v5 v5 v6 | v5 0 0 0 | v1 v7 v5 v3 v5 v6 v3 | v5 v2 v3 v5 |
+
+v1 v7 v5 v3 v5 v6 v3 | v5 0 0 0 | v1 v7 v5 v3 v5 v6 v3 | v5 v2 v3 v5 |
+v2 v5 v1 v1 | 0 0 v6 v2 v5 v6 |
+
+// ===== 主歌（整体降低一个八度）=====
+v6 v5 v3 v5 v6 v7 | v2 v6 v7 v5 v2 v5 v6 | v6 v5 v3 v6 v5 v2 | v7 0 v6 v2 v5 v6 |
+v6 v5 v3 v5 v6 v7 | v2 v6 v7 v5 bv5 | v3 v3 bv5 bv5 bv5 bv5 | bv5 0 v6 v2 v5 v6 |
+
+v6 v5 v3 v5 v6 v7 | v2 v6 v7 v5 v2 v5 v6 | v6 v5 v3 v6 v5 v2 | v7 0 v6 v2 v5 v6 |
+v6 v5 v3 v5 v6 v7 | v2 v6 v7 v5 bv5 | v3 - bv5 bv5 bv5 bv5 | bv5 0 0 |
+
+// ===== 副歌（整体降低一个八度）=====
+( v6 v5 v3 v5 v6 v2 v7 | 0 0 0 0 | v6 v5 v2 v5 v6 v5 v2 v7 | 0 0 0 v6 v5 |
+v3 v5 v6 v5 v2 v7 0 | 0 v5 v6 v5 | v5 bv5 - v3 | v3 - v2 v6 v5 |
+
+// ===== 间奏（整体降低一个八度）=====
+v3 v2 v5 v5 v6 | v6 v7 v5 v2 | v3 v2 v5 v5 v6 | v6 v7 v7 v5 0 |
+v3 v2 v5 v5 v6 | v6 v7 v5 v2 | v3 v2 v5 v5 v6 | v5 0 0 0 |
+
+v3 v2 v5 v5 v6 | v6 v7 v6 0 | v3 v2 v5 v5 v6 | v6 v7 v5 v2 |
+v3 v2 v5 v5 v6 | v5 0 0 0 | v1 v7 v5 v3 v5 v6 v3 | v5 v2 v3 v5 |
+
+v1 v7 v5 v3 v5 v6 v3 | v5 0 0 0 | v1 v7 v5 v3 v5 v6 v3 | v5 v2 v3 v5 |
+v2 v5 v1 v1 | 0 0 v6 v2 v5 v6 |
+
+// ===== 重复主歌（整体降低一个八度）=====
+v6 v5 v3 v5 v6 v7 | v2 v6 v7 v5 v2 v5 v6 | v6 v5 v3 v6 v5 v2 | v7 0 v6 v2 v5 v6 |
+v6 v5 v3 v5 v6 v7 | v2 v6 v7 v5 bv5 | v3 v3 bv5 bv5 bv5 bv5 | bv5 0 v6 v2 v5 v6 |
+
+v6 v5 v3 v5 v6 v7 | v2 v6 v7 v5 v2 v5 v6 | v6 v5 v3 v6 v5 v2 | v7 0 v6 v2 v5 v6 |
+v6 v5 v3 v5 v6 v7 | v2 v6 v7 v5 bv5 | v3 - bv5 bv5 bv5 bv5 | bv5 0 0 |
+
+// ===== 结尾（整体降低一个八度）=====
+( v6 v5 v3 v5 v6 v2 v7 | 0 0 0 0 | v6 v5 v2 v5 v6 v5 v2 v7 | 0 0 0 v6 v5 |
+v3 v5 v6 v5 v2 v7 0 | 0 v5 v6 v5 | v5 bv5 - v3 | v3 - v2 v6 v5 |
+
+// ===== 八度转换说明 =====
+// 原中音区（1-7）→ 低音区（v1-v7）
+// 原高音区（^1-^7）→ 中音区（1-7）
+// 降音标记 b 跟随音区标记，如 b5 → bv5
